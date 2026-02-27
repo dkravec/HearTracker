@@ -97,7 +97,7 @@ struct HearingAidListView: View {
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                    Text("\(aid.batteryChangeCount) changes")
+                    Text("\(aid.logs.count) changes")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
