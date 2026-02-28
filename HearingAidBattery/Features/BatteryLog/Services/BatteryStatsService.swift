@@ -45,21 +45,27 @@ final class BatteryStatsService: BatteryStatsProviding {
     }
 
     func durations(for hearingAidId: UUID, windowSize: Int, context: ModelContext) -> [TimeInterval] {
-        let logs = sortedLogs(for: hearingAidId, context: context)
-        return durations(from: logs, windowSize: windowSize)
+        snapshotAndDurations(
+            for: hearingAidId,
+            windowSize: windowSize,
+            context: context
+        ).durations
     }
 
     func averageDuration(for hearingAidId: UUID, windowSize: Int, context: ModelContext) -> TimeInterval? {
-        let sampleDurations = durations(for: hearingAidId, windowSize: windowSize, context: context)
-        guard sampleDurations.isEmpty == false else { return nil }
-        return sampleDurations.reduce(0, +) / Double(sampleDurations.count)
+        snapshotAndDurations(
+            for: hearingAidId,
+            windowSize: windowSize,
+            context: context
+        ).snapshot.avgDuration
     }
 
     func predictedDeath(for hearingAidId: UUID, windowSize: Int, context: ModelContext) -> Date? {
-        let logs = sortedLogs(for: hearingAidId, context: context)
-        guard let currentLog = logs.first else { return nil }
-        guard let average = averageDuration(for: hearingAidId, windowSize: windowSize, context: context) else { return nil }
-        return currentLog.timestamp.addingTimeInterval(average)
+        snapshotAndDurations(
+            for: hearingAidId,
+            windowSize: windowSize,
+            context: context
+        ).snapshot.predictedDeath
     }
 
     func currentBatteryAge(
@@ -67,9 +73,12 @@ final class BatteryStatsService: BatteryStatsProviding {
         context: ModelContext,
         referenceDate: Date = Date()
     ) -> TimeInterval? {
-        let logs = sortedLogs(for: hearingAidId, context: context)
-        guard let currentLog = logs.first else { return nil }
-        return max(0, referenceDate.timeIntervalSince(currentLog.timestamp))
+        snapshotAndDurations(
+            for: hearingAidId,
+            windowSize: 0,
+            context: context,
+            referenceDate: referenceDate
+        ).snapshot.currentAge
     }
 
     func statsSnapshot(
@@ -78,8 +87,12 @@ final class BatteryStatsService: BatteryStatsProviding {
         context: ModelContext,
         referenceDate: Date = Date()
     ) -> BatteryStatsSnapshot {
-        let logs = sortedLogs(for: hearingAidId, context: context)
-        return statsSnapshot(from: logs, windowSize: windowSize, referenceDate: referenceDate)
+        snapshotAndDurations(
+            for: hearingAidId,
+            windowSize: windowSize,
+            context: context,
+            referenceDate: referenceDate
+        ).snapshot
     }
 
     func statsSnapshot(
@@ -87,21 +100,11 @@ final class BatteryStatsService: BatteryStatsProviding {
         windowSize: Int,
         referenceDate: Date = Date()
     ) -> BatteryStatsSnapshot {
-        guard let currentLog = sortedLogs.first else {
-            return .empty
-        }
-
         let sampleDurations = durations(from: sortedLogs, windowSize: windowSize)
-        let avgDuration = sampleDurations.isEmpty ? nil : sampleDurations.reduce(0, +) / Double(sampleDurations.count)
-        let currentAge = max(0, referenceDate.timeIntervalSince(currentLog.timestamp))
-        let predictedDeath = avgDuration.map { currentLog.timestamp.addingTimeInterval($0) }
-
-        return BatteryStatsSnapshot(
-            currentLogId: currentLog.id,
-            currentAge: currentAge,
-            avgDuration: avgDuration,
-            predictedDeath: predictedDeath,
-            sampleCount: sampleDurations.count
+        return statsSnapshot(
+            from: sortedLogs,
+            sampleDurations: sampleDurations,
+            referenceDate: referenceDate
         )
     }
 
@@ -119,5 +122,43 @@ final class BatteryStatsService: BatteryStatsProviding {
             return Array(completedDurations.prefix(windowSize))
         }
         return completedDurations
+    }
+
+    private func snapshotAndDurations(
+        for hearingAidId: UUID,
+        windowSize: Int,
+        context: ModelContext,
+        referenceDate: Date = Date()
+    ) -> (snapshot: BatteryStatsSnapshot, durations: [TimeInterval]) {
+        let logs = sortedLogs(for: hearingAidId, context: context)
+        let sampleDurations = durations(from: logs, windowSize: windowSize)
+        let snapshot = statsSnapshot(
+            from: logs,
+            sampleDurations: sampleDurations,
+            referenceDate: referenceDate
+        )
+        return (snapshot, sampleDurations)
+    }
+
+    private func statsSnapshot(
+        from sortedLogs: [BatteryLog],
+        sampleDurations: [TimeInterval],
+        referenceDate: Date
+    ) -> BatteryStatsSnapshot {
+        guard let currentLog = sortedLogs.first else {
+            return .empty
+        }
+
+        let avgDuration = sampleDurations.isEmpty ? nil : sampleDurations.reduce(0, +) / Double(sampleDurations.count)
+        let currentAge = max(0, referenceDate.timeIntervalSince(currentLog.timestamp))
+        let predictedDeath = avgDuration.map { currentLog.timestamp.addingTimeInterval($0) }
+
+        return BatteryStatsSnapshot(
+            currentLogId: currentLog.id,
+            currentAge: currentAge,
+            avgDuration: avgDuration,
+            predictedDeath: predictedDeath,
+            sampleCount: sampleDurations.count
+        )
     }
 }

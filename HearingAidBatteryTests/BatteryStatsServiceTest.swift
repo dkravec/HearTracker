@@ -196,6 +196,72 @@ struct BatteryStatsServiceTests {
         #expect(viewModel.sampleCount == expectedSnapshot.sampleCount)
     }
 
+    @Test
+    // Verifies a single log has no completed samples while still reporting current battery age.
+    func singleLogProducesNoAverageOrPredictionButKeepsCurrentAge() throws {
+        let service = BatteryStatsService()
+        let aid = HearingAid(name: "A")
+        let container = try ModelContainer(
+            for: Schema([HearingAid.self, BatteryLog.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+
+        let onlyLog = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 4_000))
+        context.insert(aid)
+        context.insert(onlyLog)
+        try context.save()
+
+        let snapshot = service.statsSnapshot(
+            for: aid.id,
+            windowSize: 10,
+            context: context,
+            referenceDate: Date(timeIntervalSince1970: 5_000)
+        )
+
+        #expect(snapshot.sampleCount == 0)
+        #expect(snapshot.avgDuration == nil)
+        #expect(snapshot.predictedDeath == nil)
+        #expect(snapshot.currentAge == 1_000)
+    }
+
+    @Test
+    // Verifies equal or reversed timestamps do not create invalid samples and newest log remains current.
+    func nonPositiveDurationsAreIgnoredAndNewestLogRemainsCurrent() throws {
+        let service = BatteryStatsService()
+        let aid = HearingAid(name: "A")
+        let container = try ModelContainer(
+            for: Schema([HearingAid.self, BatteryLog.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+
+        let newest = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 4_000))
+        let equalA = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 3_000))
+        let equalB = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 3_000))
+        let oldest = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 1_000))
+
+        // Insert out of order to ensure fetch sorting defines the evaluation order.
+        context.insert(aid)
+        context.insert(equalA)
+        context.insert(newest)
+        context.insert(oldest)
+        context.insert(equalB)
+        try context.save()
+
+        let snapshot = service.statsSnapshot(
+            for: aid.id,
+            windowSize: 0,
+            context: context,
+            referenceDate: Date(timeIntervalSince1970: 5_000)
+        )
+
+        #expect(snapshot.currentLogId == newest.id)
+        #expect(snapshot.sampleCount == 2)
+        #expect(snapshot.avgDuration == 1_500)
+        #expect(snapshot.predictedDeath == Date(timeIntervalSince1970: 5_500))
+    }
+
 }
 
 @MainActor

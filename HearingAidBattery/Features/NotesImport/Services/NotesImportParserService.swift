@@ -29,7 +29,7 @@ struct NotesImportParserService {
                             kind: .issue,
                             originalLine: line,
                             timestamp: timestamp,
-                            text: text,
+                            parsedLine: text,
                             timestampInferred: extraction.usedDateOnly
                         )
                     )
@@ -39,7 +39,7 @@ struct NotesImportParserService {
                             kind: .battery,
                             originalLine: line,
                             timestamp: timestamp,
-                            text: text,
+                            parsedLine: text,
                             timestampInferred: extraction.usedDateOnly
                         )
                     )
@@ -54,7 +54,7 @@ struct NotesImportParserService {
                         kind: .issue,
                         originalLine: line,
                         timestamp: nil,
-                        text: nil,
+                        parsedLine: nil,
                         timestampInferred: false
                     )
                 )

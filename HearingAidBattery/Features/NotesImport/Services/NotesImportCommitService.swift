@@ -20,9 +20,11 @@ struct NotesImportCommitService {
                 continue
             }
 
+            let noteText = normalized(item.note)
+
             switch item.kind {
             case .battery:
-                if batteryLogExists(timestamp: timestamp, note: normalized(item.text), hearingAidId: hearingAid.id, context: context) {
+                if batteryLogExists(timestamp: timestamp, note: noteText, hearingAidId: hearingAid.id, context: context) {
                     skippedDuplicates += 1
                     continue
                 }
@@ -30,17 +32,15 @@ struct NotesImportCommitService {
                 let log = BatteryLog(
                     hearingAid: hearingAid,
                     timestamp: timestamp,
-                    note: normalized(item.text)
+                    note: noteText
                 )
                 context.insert(log)
                 createdBatteryLogs += 1
 
             case .issue:
-                let issueText = normalized(item.text)
-                guard let issueText, issueText.isEmpty == false else {
-                    unresolvedSkipped += 1
-                    continue
-                }
+                let issueText = noteText
+                    ?? normalized(item.originalLine)
+                    ?? "Imported issue"
 
                 if issueExists(timestamp: timestamp, issue: issueText, hearingAidId: hearingAid.id, context: context) {
                     skippedDuplicates += 1
@@ -52,7 +52,7 @@ struct NotesImportCommitService {
                     timestamp: timestamp,
                     issue: issueText,
                     severity: nil,
-                    note: nil,
+                    note: noteText,
                     linkedBatteryLogId: nil,
                     context: context
                 )

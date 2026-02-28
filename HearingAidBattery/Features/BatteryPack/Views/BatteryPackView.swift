@@ -12,9 +12,16 @@ struct BatteryPackListView: View {
     let averageDuration: TimeInterval?
 
     var body: some View {
-        BatteryPackSectionView(
-            averageDuration: averageDuration
-        )
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                BatteryPackSectionView(
+                    averageDuration: averageDuration
+                )
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .appBackground()
     }
 }
 

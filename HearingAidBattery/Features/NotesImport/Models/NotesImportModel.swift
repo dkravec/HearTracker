@@ -10,7 +10,7 @@ struct NotesImportParsedItem: Identifiable, Hashable {
     let kind: NotesImportItemKind
     let originalLine: String
     let timestamp: Date?
-    let text: String?
+    let parsedLine: String?
     let timestampInferred: Bool
 
     init(
@@ -18,14 +18,14 @@ struct NotesImportParsedItem: Identifiable, Hashable {
         kind: NotesImportItemKind,
         originalLine: String,
         timestamp: Date?,
-        text: String?,
+        parsedLine: String?,
         timestampInferred: Bool = false
     ) {
         self.id = id
         self.kind = kind
         self.originalLine = originalLine
         self.timestamp = timestamp
-        self.text = text
+        self.parsedLine = parsedLine
         self.timestampInferred = timestampInferred
     }
 }
@@ -43,9 +43,9 @@ struct NotesImportParseResult {
 
 struct NotesImportPreviewItem: Identifiable, Hashable {
     let id: UUID
-    let kind: NotesImportItemKind
+    var kind: NotesImportItemKind
     let originalLine: String
-    var text: String
+    var note: String
     var resolvedTimestamp: Date?
     let timestampInferred: Bool
 
@@ -53,7 +53,7 @@ struct NotesImportPreviewItem: Identifiable, Hashable {
         self.id = parsed.id
         self.kind = parsed.kind
         self.originalLine = parsed.originalLine
-        self.text = parsed.text ?? ""
+        self.note = parsed.parsedLine ?? ""
         self.resolvedTimestamp = parsed.timestamp
         self.timestampInferred = parsed.timestampInferred
     }
