@@ -10,7 +10,7 @@ import SwiftData
 
 @MainActor
 protocol BatteryLogProviding {
-    func quickLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) throws
+    func quickLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) throws -> Bool
     func updateLog(
         _ log: BatteryLog,
         timestamp: Date,
@@ -25,14 +25,17 @@ protocol BatteryLogProviding {
 
 @MainActor
 final class BatteryLogService: BatteryLogProviding {
+    private let batteryPackService = BatteryPackService()
+
     func quickLog(
         for hearingAid: HearingAid,
         timestamp: Date = Date(),
         note: String? = nil,
         context: ModelContext
-    ) throws {
+    ) throws -> Bool {
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNote = (trimmedNote?.isEmpty == true) ? nil : trimmedNote
+        let didConsumePack = batteryPackService.consumeOneBatteryFIFO(for: hearingAid.id, context: context)
 
         let newLog = BatteryLog(
             hearingAid: hearingAid,
@@ -42,6 +45,7 @@ final class BatteryLogService: BatteryLogProviding {
 
         context.insert(newLog)
         try context.save()
+        return didConsumePack
     }
 
     func updateLog(

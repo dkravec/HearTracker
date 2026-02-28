@@ -11,11 +11,20 @@ import SwiftData
 struct HearingAidListView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
+    @Query(sort: \BatteryPack.purchaseDate, order: .reverse) private var packs: [BatteryPack]
 
     @StateObject private var viewModel = HearingAidListViewModel()
     private let statsService = BatteryStatsService()
+    private let batteryPackService = BatteryPackService()
     private let durationFormatter = BatteryDurationFormatter()
     private static let statsWindowSize: Int = 10
+
+    @State private var showsAddActions: Bool = false
+    @State private var showsAddHearingAidSheet: Bool = false
+    @State private var showsLogAidPicker: Bool = false
+    @State private var showsPackAidPicker: Bool = false
+    @State private var addPackAid: HearingAid?
+    @State private var packPendingDelete: BatteryPack?
 
     private var activeAids: [HearingAid] {
         viewModel.activeAids(from: hearingAids)
@@ -32,6 +41,21 @@ struct HearingAidListView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
+                        if viewModel.showsInventoryWarning {
+                            CardRowContainer {
+                                HStack(alignment: .top, spacing: 10) {
+                                    Label("No battery pack inventory found. Log saved without consuming inventory.", systemImage: "exclamationmark.triangle")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Spacer(minLength: 8)
+                                    Button("Dismiss") {
+                                        viewModel.dismissInventoryWarning()
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                        }
+
                         if activeAids.isEmpty == false {
                             SectionHeaderView(title: "Battery Stats")
 
@@ -43,10 +67,16 @@ struct HearingAidListView: View {
                                             windowSize: Self.statsWindowSize,
                                             context: context
                                         )
+                                        let aidPacks = packsForAid(aid.id)
+                                        let costStats = batteryPackService.costStatsByCurrency(
+                                            from: aidPacks,
+                                            averageDuration: snapshot.avgDuration
+                                        )
                                         HomeBatteryStatsCard(
                                             aidName: aid.name,
                                             snapshot: snapshot,
-                                            durationFormatter: durationFormatter
+                                            durationFormatter: durationFormatter,
+                                            costPerDaySummary: costPerDaySummary(from: costStats)
                                         )
                                     }
                                 }
@@ -70,6 +100,62 @@ struct HearingAidListView: View {
                                 aid: aid,
                                 onLogTapped: { viewModel.beginLog(for: aid) }
                             )
+                        }
+
+                        SectionHeaderView(title: "Battery Packs")
+                            .padding(.top, 8)
+
+                        if packs.isEmpty {
+                            CardRowContainer {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("No Battery Packs")
+                                        .font(.headline)
+                                    Text("Add a battery pack to track inventory and cost.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                    Button("Add Pack") {
+                                        beginPackFlow()
+                                    }
+                                    .buttonStyle(.borderedProminent)
+                                }
+                            }
+                        } else {
+                            ForEach(packs) { pack in
+                                CardRowContainer {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text(pack.hearingAid?.name ?? "Unknown Aid")
+                                                .font(.headline)
+                                            Spacer(minLength: 8)
+                                            Text("\(pack.quantityRemaining)/\(pack.quantityPurchased) left")
+                                                .font(.caption.weight(.semibold))
+                                                .foregroundStyle(.secondary)
+                                        }
+
+                                        Text("Type: \(pack.batteryType)")
+                                            .font(.subheadline)
+
+                                        if let brand = pack.brand, brand.isEmpty == false {
+                                            Text("Brand: \(brand)")
+                                                .font(.subheadline)
+                                        }
+
+                                        Text("Purchased \(pack.purchaseDate.formatted(date: .abbreviated, time: .omitted))")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+
+                                        if let amount = pack.priceAmount, let code = pack.currencyCode {
+                                            Text("Price: \(currencyText(amount: amount, currencyCode: code))")
+                                                .font(.subheadline)
+                                        }
+                                    }
+                                }
+                                .contextMenu {
+                                    Button("Delete Pack", role: .destructive) {
+                                        packPendingDelete = pack
+                                    }
+                                }
+                            }
                         }
 
                         if viewModel.showsRetired, !retiredAids.isEmpty {
@@ -98,7 +184,9 @@ struct HearingAidListView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink("Add") { AddHearingAidView().appBackground() }
+                    Button("Add") {
+                        showsAddActions = true
+                    }
                 }
 
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -108,6 +196,45 @@ struct HearingAidListView: View {
                         }
                     }
                 }
+            }
+        }
+        .confirmationDialog("Add", isPresented: $showsAddActions, titleVisibility: .visible) {
+            Button("Battery Log") {
+                beginLogFlow()
+            }
+            .disabled(activeAids.isEmpty)
+
+            Button("Pack") {
+                beginPackFlow()
+            }
+            .disabled(activeAids.isEmpty)
+
+            Button("Hearing Aid") {
+                showsAddHearingAidSheet = true
+            }
+
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog("Log Battery For", isPresented: $showsLogAidPicker, titleVisibility: .visible) {
+            ForEach(activeAids) { aid in
+                Button(aid.name) {
+                    viewModel.beginLog(for: aid)
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog("Add Pack For", isPresented: $showsPackAidPicker, titleVisibility: .visible) {
+            ForEach(activeAids) { aid in
+                Button(aid.name) {
+                    addPackAid = aid
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $showsAddHearingAidSheet) {
+            NavigationStack {
+                AddHearingAidView()
+                    .appBackground()
             }
         }
         .sheet(item: $viewModel.logTargetAid) { aid in
@@ -128,6 +255,98 @@ struct HearingAidListView: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
+        .sheet(item: $addPackAid) { aid in
+            AddBatteryPackSheet(
+                existingPacks: packsForAid(aid.id),
+                previousPack: packsForAid(aid.id).last,
+                onSave: { batteryType, brand, purchaseDate, quantityPurchased, priceAmount, currencyCode in
+                    try? batteryPackService.createBatteryPack(
+                        for: aid,
+                        batteryType: batteryType,
+                        purchaseDate: purchaseDate,
+                        quantityPurchased: quantityPurchased,
+                        priceAmount: priceAmount,
+                        currencyCode: currencyCode,
+                        brand: brand,
+                        context: context
+                    )
+                    addPackAid = nil
+                },
+                onCancel: {
+                    addPackAid = nil
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .appBackground()
+        }
+        .alert("Delete Battery Pack?", isPresented: deletePackAlertBinding) {
+            Button("Delete", role: .destructive) {
+                if let packPendingDelete {
+                    try? batteryPackService.deleteBatteryPack(packPendingDelete, context: context)
+                }
+                packPendingDelete = nil
+            }
+            Button("Cancel", role: .cancel) {
+                packPendingDelete = nil
+            }
+        } message: {
+            Text("This action cannot be undone.")
+        }
+    }
+
+    private var deletePackAlertBinding: Binding<Bool> {
+        Binding(
+            get: { packPendingDelete != nil },
+            set: { isPresented in
+                if !isPresented {
+                    packPendingDelete = nil
+                }
+            }
+        )
+    }
+
+    private func beginLogFlow() {
+        if activeAids.count == 1, let onlyAid = activeAids.first {
+            viewModel.beginLog(for: onlyAid)
+            return
+        }
+        showsLogAidPicker = true
+    }
+
+    private func beginPackFlow() {
+        if activeAids.count == 1, let onlyAid = activeAids.first {
+            addPackAid = onlyAid
+            return
+        }
+        showsPackAidPicker = true
+    }
+
+    private func packsForAid(_ hearingAidId: UUID) -> [BatteryPack] {
+        packs
+            .filter { $0.hearingAid?.id == hearingAidId }
+            .sorted { $0.purchaseDate < $1.purchaseDate }
+    }
+
+    private func costPerDaySummary(from costStats: [BatteryPackCostStat]) -> String {
+        guard costStats.isEmpty == false else { return "Not enough data" }
+
+        let pieces = costStats.compactMap { stat -> String? in
+            guard let costPerDay = stat.costPerDay else { return nil }
+            return "\(stat.currencyCode) \(currencyText(amount: costPerDay, currencyCode: stat.currencyCode))/day"
+        }
+
+        if pieces.isEmpty { return "Not enough data" }
+        if pieces.count == 1 { return pieces[0] }
+        return "\(pieces[0]) +\(pieces.count - 1)"
+    }
+
+    private func currencyText(amount: Decimal, currencyCode: String) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = currencyCode
+        let number = NSDecimalNumber(decimal: amount)
+        return formatter.string(from: number) ?? number.stringValue
     }
 }
 
@@ -135,6 +354,7 @@ private struct HomeBatteryStatsCard: View {
     let aidName: String
     let snapshot: BatteryStatsSnapshot
     let durationFormatter: BatteryDurationFormatter
+    let costPerDaySummary: String
 
     var body: some View {
         CardRowContainer {
@@ -162,9 +382,9 @@ private struct HomeBatteryStatsCard: View {
                 }
 
                 statRow(
-                    title: "Current Age",
-                    value: durationFormatter.optionalDaysText(from: snapshot.currentAge) ?? "Not enough data",
-                    icon: "clock"
+                    title: "Current / Predicted",
+                    value: "\(durationFormatter.optionalDaysText(from: snapshot.currentAge) ?? "n/a") • \(snapshot.predictedDeath.map { durationFormatter.relativeDateText(from: $0) } ?? "n/a")",
+                    icon: "clock.arrow.trianglehead.counterclockwise.rotate.90"
                 )
 
                 statRow(
@@ -174,12 +394,12 @@ private struct HomeBatteryStatsCard: View {
                 )
 
                 statRow(
-                    title: "Predicted",
-                    value: snapshot.predictedDeath.map { durationFormatter.relativeDateText(from: $0) } ?? "Not enough data",
-                    icon: "calendar.badge.clock"
+                    title: "Cost / day",
+                    value: costPerDaySummary,
+                    icon: "dollarsign.circle"
                 )
             }
-            .frame(width: 220, height: 200, alignment: .topLeading)
+            .frame(width: 245, height: 200, alignment: .topLeading)
         }
     }
 
@@ -196,7 +416,7 @@ private struct HomeBatteryStatsCard: View {
                     .foregroundStyle(.secondary)
                 Text(value)
                     .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.8)
             }
             Spacer(minLength: 0)

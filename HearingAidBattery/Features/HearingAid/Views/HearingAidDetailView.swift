@@ -41,7 +41,16 @@ struct HearingAidDetailView: View {
                     editSection
                 }
 
+                if viewModel.showsInventoryWarning {
+                    inventoryWarningCard
+                }
+
                 statsSection
+
+                BatteryPackSectionView(
+                    hearingAid: aid,
+                    averageDuration: batteryStatusViewModel.avgDuration
+                )
 
                 SectionHeaderView(title: "Battery Logs")
                     .padding(.top, viewModel.isEditing ? 4 : 0)
@@ -158,6 +167,21 @@ struct HearingAidDetailView: View {
                     title: "Predicted death",
                     value: batteryStatusViewModel.predictedDeathText ?? "Not enough data"
                 )
+            }
+        }
+    }
+
+    private var inventoryWarningCard: some View {
+        CardRowContainer {
+            HStack(alignment: .top, spacing: 10) {
+                Label("No battery pack inventory found. Log saved without consuming inventory.", systemImage: "exclamationmark.triangle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 8)
+                Button("Dismiss") {
+                    viewModel.dismissInventoryWarning()
+                }
+                .buttonStyle(.bordered)
             }
         }
     }

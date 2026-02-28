@@ -195,6 +195,7 @@ struct BatteryStatsServiceTests {
         #expect(viewModel.currentBatteryAge == expectedSnapshot.currentAge)
         #expect(viewModel.sampleCount == expectedSnapshot.sampleCount)
     }
+
 }
 
 @MainActor

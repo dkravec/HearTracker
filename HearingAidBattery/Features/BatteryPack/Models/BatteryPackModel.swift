@@ -13,7 +13,7 @@ final class BatteryPack {
     var id: UUID = UUID()
     var createdAt: Date = Date()
 
-    var batteryType: String
+    var batteryType: String = ""
     var purchaseDate: Date = Date()
 
     var quantityPurchased: Int = 0

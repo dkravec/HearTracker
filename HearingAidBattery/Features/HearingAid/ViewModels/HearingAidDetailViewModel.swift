@@ -19,6 +19,7 @@ final class HearingAidDetailViewModel: ObservableObject {
     @Published var showsLogSheet: Bool = false
     @Published var logNote: String = ""
     @Published var logTimestamp: Date = Date()
+    @Published var showsInventoryWarning: Bool = false
 
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
@@ -110,12 +111,28 @@ final class HearingAidDetailViewModel: ObservableObject {
     }
 
     func saveLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) {
-        try? batteryLogService.quickLog(for: hearingAid, timestamp: timestamp, note: note, context: context)
+        let consumedPack = (try? batteryLogService.quickLog(
+            for: hearingAid,
+            timestamp: timestamp,
+            note: note,
+            context: context
+        )) ?? true
+        showsInventoryWarning = !consumedPack
         endLog()
     }
 
     func saveLogWithoutNote(for hearingAid: HearingAid, timestamp: Date, context: ModelContext) {
-        try? batteryLogService.quickLog(for: hearingAid, timestamp: timestamp, note: nil, context: context)
+        let consumedPack = (try? batteryLogService.quickLog(
+            for: hearingAid,
+            timestamp: timestamp,
+            note: nil,
+            context: context
+        )) ?? true
+        showsInventoryWarning = !consumedPack
         endLog()
+    }
+
+    func dismissInventoryWarning() {
+        showsInventoryWarning = false
     }
 }
