@@ -17,23 +17,25 @@ struct BatteryPackCostStat {
 @MainActor
 final class BatteryPackService {
     func createBatteryPack(
-        for hearingAid: HearingAid,
         batteryType: String,
         purchaseDate: Date,
-        quantityPurchased: Int,
+        batteriesPerPack: Int,
+        numberOfPacks: Int,
         priceAmount: Decimal? = nil,
         currencyCode: String? = nil,
+        brand: String? = nil,
         retailer: String? = nil,
         note: String? = nil,
         context: ModelContext
     ) throws {
         let pack = BatteryPack(
-            hearingAid: hearingAid,
             batteryType: batteryType,
             purchaseDate: purchaseDate,
-            quantityPurchased: quantityPurchased,
+            batteriesPerPack: batteriesPerPack,
+            numberOfPacks: numberOfPacks,
             priceAmount: priceAmount,
-            currencyCode: currencyCode
+            currencyCode: currencyCode,
+            brand: brand?.trimmingCharacters(in: .whitespacesAndNewlines)
         )
 
         pack.retailer = retailer?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -48,25 +50,39 @@ final class BatteryPackService {
         try context.save()
     }
 
-    func consumeOneBatteryFIFO(for hearingAidId: UUID, context: ModelContext) -> Bool {
+    func consumeOneBattery(
+        selectedPackId: UUID?,
+        preferredBatteryType: String?,
+        context: ModelContext
+    ) -> BatteryPack? {
         let descriptor = FetchDescriptor<BatteryPack>(
             predicate: #Predicate<BatteryPack> {
-                $0.hearingAid?.id == hearingAidId && $0.quantityRemaining > 0
+                $0.quantityRemaining > 0
             },
             sortBy: [SortDescriptor(\BatteryPack.purchaseDate, order: .forward)]
         )
 
         let packs = (try? context.fetch(descriptor)) ?? []
-        guard let pack = packs.first else {
-            return false
+        let selectedPack: BatteryPack? = {
+            guard let selectedPackId else { return nil }
+            return packs.first(where: { $0.id == selectedPackId })
+        }()
+        let matchedPack: BatteryPack? = {
+            guard let preferredBatteryType else { return nil }
+            let normalizedType = preferredBatteryType.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard normalizedType.isEmpty == false else { return nil }
+            return packs.first {
+                $0.batteryType.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .localizedCaseInsensitiveCompare(normalizedType) == .orderedSame
+            }
+        }()
+
+        guard let packToConsume = selectedPack ?? matchedPack ?? packs.first else {
+            return nil
         }
 
-        guard pack.quantityRemaining > 0 else {
-            return false
-        }
-
-        pack.quantityRemaining -= 1
-        return true
+        packToConsume.quantityRemaining -= 1
+        return packToConsume
     }
 
     func costStatsByCurrency(from packs: [BatteryPack], averageDuration: TimeInterval?) -> [BatteryPackCostStat] {

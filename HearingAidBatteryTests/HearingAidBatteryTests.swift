@@ -18,12 +18,13 @@ struct HearingAidServiceTests {
         let container = try testContainer()
         let context = ModelContext(container)
 
-        try service.createHearingAid(name: "  My Aid  ", model: "  M50  ", context: context)
+        try service.createHearingAid(name: "  My Aid  ", model: "  M50  ", batteryType: " 312 ", context: context)
         let aids = try context.fetch(FetchDescriptor<HearingAid>())
 
         #expect(aids.count == 1)
         #expect(aids[0].name == "My Aid")
         #expect(aids[0].model == "M50")
+        #expect(aids[0].batteryType == "312")
     }
 
     @Test
@@ -34,10 +35,11 @@ struct HearingAidServiceTests {
         let aid = HearingAid(name: "Original", model: "X")
         context.insert(aid)
 
-        try service.updateHearingAid(aid, name: "   ", model: "   ", retired: true, context: context)
+        try service.updateHearingAid(aid, name: "   ", model: "   ", batteryType: " 13 ", retired: true, context: context)
 
         #expect(aid.name == "Original")
         #expect(aid.model == nil)
+        #expect(aid.batteryType == "13")
         #expect(aid.retired == true)
     }
 }
@@ -53,16 +55,16 @@ struct BatteryLogServiceTests {
         context.insert(aid)
 
         let olderPack = BatteryPack(
-            hearingAid: aid,
             batteryType: "312",
             purchaseDate: Date(timeIntervalSince1970: 1_000),
-            quantityPurchased: 6
+            batteriesPerPack: 6,
+            numberOfPacks: 1
         )
         let newerPack = BatteryPack(
-            hearingAid: aid,
             batteryType: "312",
             purchaseDate: Date(timeIntervalSince1970: 2_000),
-            quantityPurchased: 6
+            batteriesPerPack: 6,
+            numberOfPacks: 1
         )
         context.insert(olderPack)
         context.insert(newerPack)
@@ -72,6 +74,7 @@ struct BatteryLogServiceTests {
             for: aid,
             timestamp: Date(timeIntervalSince1970: 9_999),
             note: "  changed battery  ",
+            selectedPackId: nil,
             context: context
         )
 
@@ -98,9 +101,95 @@ struct BatteryLogServiceTests {
         context.insert(aid)
         try context.save()
 
-        let consumed = try logService.quickLog(for: aid, timestamp: Date(), note: nil, context: context)
+        let consumed = try logService.quickLog(
+            for: aid,
+            timestamp: Date(),
+            note: nil,
+            selectedPackId: nil,
+            context: context
+        )
 
         #expect(consumed == false)
+    }
+
+    @Test
+    func quickLogUsesSelectedPackWhenProvided() throws {
+        let logService = BatteryLogService()
+        let container = try testContainer()
+        let context = ModelContext(container)
+        let aid = HearingAid(name: "A")
+        context.insert(aid)
+
+        let older = BatteryPack(
+            batteryType: "13",
+            purchaseDate: Date(timeIntervalSince1970: 1_000),
+            batteriesPerPack: 6,
+            numberOfPacks: 1
+        )
+        let selected = BatteryPack(
+            batteryType: "312",
+            purchaseDate: Date(timeIntervalSince1970: 2_000),
+            batteriesPerPack: 6,
+            numberOfPacks: 1
+        )
+        context.insert(older)
+        context.insert(selected)
+        try context.save()
+
+        let consumed = try logService.quickLog(
+            for: aid,
+            timestamp: Date(),
+            note: nil,
+            selectedPackId: selected.id,
+            context: context
+        )
+
+        #expect(consumed == true)
+        #expect(selected.quantityRemaining == 5)
+        #expect(older.quantityRemaining == 6)
+    }
+
+    @Test
+    func quickLogAutoMatchesMostRecentBatteryType() throws {
+        let logService = BatteryLogService()
+        let container = try testContainer()
+        let context = ModelContext(container)
+        let aid = HearingAid(name: "A")
+        context.insert(aid)
+
+        let matchingTypePack = BatteryPack(
+            batteryType: "312",
+            purchaseDate: Date(timeIntervalSince1970: 2_000),
+            batteriesPerPack: 6,
+            numberOfPacks: 1
+        )
+        let olderDifferentTypePack = BatteryPack(
+            batteryType: "13",
+            purchaseDate: Date(timeIntervalSince1970: 1_000),
+            batteriesPerPack: 6,
+            numberOfPacks: 1
+        )
+        context.insert(matchingTypePack)
+        context.insert(olderDifferentTypePack)
+        try context.save()
+
+        _ = try logService.quickLog(
+            for: aid,
+            timestamp: Date(timeIntervalSince1970: 10_000),
+            note: nil,
+            selectedPackId: matchingTypePack.id,
+            context: context
+        )
+        _ = try logService.quickLog(
+            for: aid,
+            timestamp: Date(timeIntervalSince1970: 11_000),
+            note: nil,
+            selectedPackId: nil,
+            context: context
+        )
+
+        #expect(matchingTypePack.quantityRemaining == 4)
+        #expect(olderDifferentTypePack.quantityRemaining == 6)
     }
 }
 
@@ -111,14 +200,11 @@ struct BatteryPackServiceTests {
         let service = BatteryPackService()
         let container = try testContainer()
         let context = ModelContext(container)
-        let aid = HearingAid(name: "A")
-        context.insert(aid)
-
         try service.createBatteryPack(
-            for: aid,
             batteryType: "312",
             purchaseDate: Date(timeIntervalSince1970: 100),
-            quantityPurchased: 12,
+            batteriesPerPack: 6,
+            numberOfPacks: 2,
             priceAmount: Decimal(24),
             currencyCode: "USD",
             retailer: "  Costco  ",
@@ -136,25 +222,24 @@ struct BatteryPackServiceTests {
     @Test
     func costStatsByCurrencyReturnsPerCurrencyWeightedValues() {
         let service = BatteryPackService()
-        let aid = HearingAid(name: "A")
         let usd1 = BatteryPack(
-            hearingAid: aid,
             batteryType: "312",
-            quantityPurchased: 10,
+            batteriesPerPack: 10,
+            numberOfPacks: 1,
             priceAmount: Decimal(20),
             currencyCode: "USD"
         )
         let usd2 = BatteryPack(
-            hearingAid: aid,
             batteryType: "312",
-            quantityPurchased: 5,
+            batteriesPerPack: 5,
+            numberOfPacks: 1,
             priceAmount: Decimal(15),
             currencyCode: "USD"
         )
         let cad = BatteryPack(
-            hearingAid: aid,
             batteryType: "13",
-            quantityPurchased: 8,
+            batteriesPerPack: 8,
+            numberOfPacks: 1,
             priceAmount: Decimal(16),
             currencyCode: "CAD"
         )

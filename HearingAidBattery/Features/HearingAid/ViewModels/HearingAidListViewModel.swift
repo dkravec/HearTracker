@@ -12,21 +12,25 @@ import SwiftData
 @MainActor
 final class HearingAidListViewModel: ObservableObject {
     @Published var showsRetired: Bool = false
-    @Published var logTargetAid: HearingAid?
+    @Published var showsLogSheet: Bool = false
+    @Published var selectedLogAidId: UUID?
     @Published var logNote: String = ""
     @Published var logTimestamp: Date = Date()
     @Published var showsInventoryWarning: Bool = false
+    @Published var selectedPackId: UUID?
 
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
+    private let statsService: BatteryStatsService
 
-    init(hearingAidService: HearingAidService, batteryLogService: BatteryLogProviding) {
+    init(hearingAidService: HearingAidService, batteryLogService: BatteryLogProviding, statsService: BatteryStatsService) {
         self.hearingAidService = hearingAidService
         self.batteryLogService = batteryLogService
+        self.statsService = statsService
     }
 
     convenience init() {
-        self.init(hearingAidService: HearingAidService(), batteryLogService: BatteryLogService())
+        self.init(hearingAidService: HearingAidService(), batteryLogService: BatteryLogService(), statsService: BatteryStatsService())
     }
 
     func activeAids(from hearingAids: [HearingAid]) -> [HearingAid] {
@@ -37,16 +41,21 @@ final class HearingAidListViewModel: ObservableObject {
         hearingAidService.retiredAids(from: hearingAids)
     }
 
+    /// Opens the log sheet pre-selecting the given hearing aid.
     func beginLog(for hearingAid: HearingAid) {
         logNote = ""
         logTimestamp = Date()
-        logTargetAid = hearingAid
+        selectedPackId = nil
+        selectedLogAidId = hearingAid.id
+        showsLogSheet = true
     }
 
     func endLog() {
         logNote = ""
         logTimestamp = Date()
-        logTargetAid = nil
+        selectedPackId = nil
+        selectedLogAidId = nil
+        showsLogSheet = false
     }
 
     func saveLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) {
@@ -54,21 +63,32 @@ final class HearingAidListViewModel: ObservableObject {
             for: hearingAid,
             timestamp: timestamp,
             note: note,
+            selectedPackId: selectedPackId,
             context: context
         )) ?? true
         showsInventoryWarning = !consumedPack
         endLog()
     }
 
-    func saveLogWithoutNote(for hearingAid: HearingAid, timestamp: Date, context: ModelContext) {
-        let consumedPack = (try? batteryLogService.quickLog(
-            for: hearingAid,
-            timestamp: timestamp,
-            note: nil,
-            context: context
-        )) ?? true
-        showsInventoryWarning = !consumedPack
-        endLog()
+    /// Resolves the selected aid ID to a HearingAid from the provided array.
+    func resolvedAid(from aids: [HearingAid]) -> HearingAid? {
+        guard let id = selectedLogAidId else { return nil }
+        return aids.first { $0.id == id }
+    }
+
+    /// Returns the active hearing aid whose battery is predicted to die soonest.
+    func aidNextToDie(from activeAids: [HearingAid], context: ModelContext) -> HearingAid? {
+        var closest: (aid: HearingAid, death: Date)?
+
+        for aid in activeAids {
+            let snapshot = statsService.statsSnapshot(for: aid.id, windowSize: 10, context: context)
+            guard let predicted = snapshot.predictedDeath else { continue }
+            if closest == nil || predicted < closest!.death {
+                closest = (aid, predicted)
+            }
+        }
+
+        return closest?.aid
     }
 
     func dismissInventoryWarning() {

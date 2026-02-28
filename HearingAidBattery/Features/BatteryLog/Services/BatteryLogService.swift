@@ -10,7 +10,13 @@ import SwiftData
 
 @MainActor
 protocol BatteryLogProviding {
-    func quickLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) throws -> Bool
+    func quickLog(
+        for hearingAid: HearingAid,
+        timestamp: Date,
+        note: String?,
+        selectedPackId: UUID?,
+        context: ModelContext
+    ) throws -> Bool
     func updateLog(
         _ log: BatteryLog,
         timestamp: Date,
@@ -31,21 +37,30 @@ final class BatteryLogService: BatteryLogProviding {
         for hearingAid: HearingAid,
         timestamp: Date = Date(),
         note: String? = nil,
+        selectedPackId: UUID? = nil,
         context: ModelContext
     ) throws -> Bool {
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNote = (trimmedNote?.isEmpty == true) ? nil : trimmedNote
-        let didConsumePack = batteryPackService.consumeOneBatteryFIFO(for: hearingAid.id, context: context)
+        let previousType = mostRecentLoggedBatteryType(for: hearingAid.id, context: context)
+            ?? hearingAid.batteryType?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let consumedPack = batteryPackService.consumeOneBattery(
+            selectedPackId: selectedPackId,
+            preferredBatteryType: selectedPackId == nil ? previousType : nil,
+            context: context
+        )
 
         let newLog = BatteryLog(
             hearingAid: hearingAid,
             timestamp: timestamp,
             note: normalizedNote
         )
+        newLog.batteryPack = consumedPack
+        newLog.batteryType = consumedPack?.batteryType ?? previousType
 
         context.insert(newLog)
         try context.save()
-        return didConsumePack
+        return consumedPack != nil
     }
 
     func updateLog(
@@ -78,5 +93,14 @@ final class BatteryLogService: BatteryLogProviding {
         }
 
         try context.save()
+    }
+
+    private func mostRecentLoggedBatteryType(for hearingAidId: UUID, context: ModelContext) -> String? {
+        let descriptor = FetchDescriptor<BatteryLog>(
+            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId },
+            sortBy: [SortDescriptor(\BatteryLog.timestamp, order: .reverse)]
+        )
+        let logs = (try? context.fetch(descriptor)) ?? []
+        return logs.first(where: { ($0.batteryType?.isEmpty == false) })?.batteryType
     }
 }

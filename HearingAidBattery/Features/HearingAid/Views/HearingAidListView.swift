@@ -20,10 +20,6 @@ struct HearingAidListView: View {
     private static let statsWindowSize: Int = 10
 
     @State private var showsAddActions: Bool = false
-    @State private var showsAddHearingAidSheet: Bool = false
-    @State private var showsLogAidPicker: Bool = false
-    @State private var showsPackAidPicker: Bool = false
-    @State private var addPackAid: HearingAid?
     @State private var packPendingDelete: BatteryPack?
 
     private var activeAids: [HearingAid] {
@@ -67,9 +63,8 @@ struct HearingAidListView: View {
                                             windowSize: Self.statsWindowSize,
                                             context: context
                                         )
-                                        let aidPacks = packsForAid(aid.id)
                                         let costStats = batteryPackService.costStatsByCurrency(
-                                            from: aidPacks,
+                                            from: packs,
                                             averageDuration: snapshot.avgDuration
                                         )
                                         HomeBatteryStatsCard(
@@ -114,7 +109,7 @@ struct HearingAidListView: View {
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
                                     Button("Add Pack") {
-                                        beginPackFlow()
+                                        showsAddActions = true
                                     }
                                     .buttonStyle(.borderedProminent)
                                 }
@@ -124,16 +119,13 @@ struct HearingAidListView: View {
                                 CardRowContainer {
                                     VStack(alignment: .leading, spacing: 8) {
                                         HStack {
-                                            Text(pack.hearingAid?.name ?? "Unknown Aid")
+                                            Text(pack.batteryType)
                                                 .font(.headline)
                                             Spacer(minLength: 8)
                                             Text("\(pack.quantityRemaining)/\(pack.quantityPurchased) left")
                                                 .font(.caption.weight(.semibold))
                                                 .foregroundStyle(.secondary)
                                         }
-
-                                        Text("Type: \(pack.batteryType)")
-                                            .font(.subheadline)
 
                                         if let brand = pack.brand, brand.isEmpty == false {
                                             Text("Brand: \(brand)")
@@ -144,9 +136,19 @@ struct HearingAidListView: View {
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
 
+                                        Text("Batteries per pack: \(pack.batteriesPerPack)")
+                                            .font(.subheadline)
+                                        Text("Number of packs: \(pack.numberOfPacks)")
+                                            .font(.subheadline)
+
                                         if let amount = pack.priceAmount, let code = pack.currencyCode {
                                             Text("Price: \(currencyText(amount: amount, currencyCode: code))")
                                                 .font(.subheadline)
+                                            if let pricePerBattery = pricePerBatteryText(for: pack, currencyCode: code) {
+                                                Text("Price per battery: \(pricePerBattery)")
+                                                    .font(.subheadline)
+                                                    .foregroundStyle(.secondary)
+                                            }
                                         }
                                     }
                                 }
@@ -184,8 +186,11 @@ struct HearingAidListView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Add") {
+                    Button {
                         showsAddActions = true
+                    } label: {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.title3)
                     }
                 }
 
@@ -198,87 +203,55 @@ struct HearingAidListView: View {
                 }
             }
         }
-        .confirmationDialog("Add", isPresented: $showsAddActions, titleVisibility: .visible) {
-            Button("Battery Log") {
-                beginLogFlow()
-            }
-            .disabled(activeAids.isEmpty)
-
-            Button("Pack") {
-                beginPackFlow()
-            }
-            .disabled(activeAids.isEmpty)
-
-            Button("Hearing Aid") {
-                showsAddHearingAidSheet = true
-            }
-
-            Button("Cancel", role: .cancel) {}
-        }
-        .confirmationDialog("Log Battery For", isPresented: $showsLogAidPicker, titleVisibility: .visible) {
-            ForEach(activeAids) { aid in
-                Button(aid.name) {
-                    viewModel.beginLog(for: aid)
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .confirmationDialog("Add Pack For", isPresented: $showsPackAidPicker, titleVisibility: .visible) {
-            ForEach(activeAids) { aid in
-                Button(aid.name) {
-                    addPackAid = aid
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .sheet(isPresented: $showsAddHearingAidSheet) {
-            NavigationStack {
-                AddHearingAidView()
-                    .appBackground()
-            }
-        }
-        .sheet(item: $viewModel.logTargetAid) { aid in
-            BatteryLogSheet(
-                note: $viewModel.logNote,
-                timestamp: $viewModel.logTimestamp,
-                onSave: { timestamp, note in
+        .sheet(isPresented: $showsAddActions) {
+            AddEntryChoiceSheet(
+                activeAids: activeAids,
+                availablePacks: availablePacks,
+                packs: Array(packs),
+                defaultAidId: viewModel.aidNextToDie(from: activeAids, context: context)?.id ?? activeAids.first?.id,
+                onSaveBatteryLog: { aid, timestamp, note, packId in
+                    viewModel.selectedPackId = packId
                     viewModel.saveLog(for: aid, timestamp: timestamp, note: note, context: context)
                 },
-                onSaveWithoutNote: { timestamp in
-                    viewModel.saveLogWithoutNote(for: aid, timestamp: timestamp, context: context)
-                },
-                onCancel: {
-                    viewModel.endLog()
-                }
-            )
-            .presentationDetents([.medium])
-            .presentationDragIndicator(.visible)
-            .appBackground()
-        }
-        .sheet(item: $addPackAid) { aid in
-            AddBatteryPackSheet(
-                existingPacks: packsForAid(aid.id),
-                previousPack: packsForAid(aid.id).last,
-                onSave: { batteryType, brand, purchaseDate, quantityPurchased, priceAmount, currencyCode in
+                onSavePack: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
                     try? batteryPackService.createBatteryPack(
-                        for: aid,
                         batteryType: batteryType,
                         purchaseDate: purchaseDate,
-                        quantityPurchased: quantityPurchased,
+                        batteriesPerPack: batteriesPerPack,
+                        numberOfPacks: numberOfPacks,
                         priceAmount: priceAmount,
                         currencyCode: currencyCode,
                         brand: brand,
                         context: context
                     )
-                    addPackAid = nil
-                },
-                onCancel: {
-                    addPackAid = nil
                 }
             )
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .appBackground()
+        }
+        .sheet(isPresented: $viewModel.showsLogSheet) {
+            if viewModel.resolvedAid(from: hearingAids) != nil {
+                BatteryLogSheet(
+                    note: $viewModel.logNote,
+                    timestamp: $viewModel.logTimestamp,
+                    selectedPackId: $viewModel.selectedPackId,
+                    availablePacks: availablePacks,
+                    onSave: { timestamp, note in
+                        if let currentAid = viewModel.resolvedAid(from: hearingAids) {
+                            viewModel.saveLog(for: currentAid, timestamp: timestamp, note: note, context: context)
+                        }
+                    },
+                    onCancel: {
+                        viewModel.endLog()
+                    },
+                    activeAids: activeAids,
+                    selectedAidId: $viewModel.selectedLogAidId
+                )
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .appBackground()
+            }
         }
         .alert("Delete Battery Pack?", isPresented: deletePackAlertBinding) {
             Button("Delete", role: .destructive) {
@@ -306,28 +279,6 @@ struct HearingAidListView: View {
         )
     }
 
-    private func beginLogFlow() {
-        if activeAids.count == 1, let onlyAid = activeAids.first {
-            viewModel.beginLog(for: onlyAid)
-            return
-        }
-        showsLogAidPicker = true
-    }
-
-    private func beginPackFlow() {
-        if activeAids.count == 1, let onlyAid = activeAids.first {
-            addPackAid = onlyAid
-            return
-        }
-        showsPackAidPicker = true
-    }
-
-    private func packsForAid(_ hearingAidId: UUID) -> [BatteryPack] {
-        packs
-            .filter { $0.hearingAid?.id == hearingAidId }
-            .sorted { $0.purchaseDate < $1.purchaseDate }
-    }
-
     private func costPerDaySummary(from costStats: [BatteryPackCostStat]) -> String {
         guard costStats.isEmpty == false else { return "Not enough data" }
 
@@ -347,6 +298,16 @@ struct HearingAidListView: View {
         formatter.currencyCode = currencyCode
         let number = NSDecimalNumber(decimal: amount)
         return formatter.string(from: number) ?? number.stringValue
+    }
+
+    private func pricePerBatteryText(for pack: BatteryPack, currencyCode: String) -> String? {
+        guard let amount = pack.priceAmount, pack.quantityPurchased > 0 else { return nil }
+        let pricePerBattery = amount / Decimal(pack.quantityPurchased)
+        return currencyText(amount: pricePerBattery, currencyCode: currencyCode)
+    }
+
+    private var availablePacks: [BatteryPack] {
+        packs.filter { $0.quantityRemaining > 0 }
     }
 }
 
@@ -447,6 +408,11 @@ private struct HearingAidCardRow: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
+                        if let batteryType = aid.batteryType?.trimmingCharacters(in: .whitespacesAndNewlines), !batteryType.isEmpty {
+                            Text("Type \(batteryType)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
                         Text("\((aid.logs ?? []).count) changes")
                             .font(.caption)
@@ -464,5 +430,123 @@ private struct HearingAidCardRow: View {
             }
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct AddEntryChoiceSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let activeAids: [HearingAid]
+    let availablePacks: [BatteryPack]
+    let packs: [BatteryPack]
+    let defaultAidId: UUID?
+    let onSaveBatteryLog: (HearingAid, Date, String?, UUID?) -> Void
+    let onSavePack: (String, String?, Date, Int, Int, Decimal?, String?) -> Void
+
+    @State private var logNote: String = ""
+    @State private var logTimestamp: Date = Date()
+    @State private var selectedPackId: UUID?
+    @State private var selectedAidId: UUID?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    if activeAids.isEmpty == false {
+                        NavigationLink {
+                            BatteryLogSheet(
+                                note: $logNote,
+                                timestamp: $logTimestamp,
+                                selectedPackId: $selectedPackId,
+                                availablePacks: availablePacks,
+                                onSave: { timestamp, note in
+                                    if let aid = activeAids.first(where: { $0.id == selectedAidId }) ?? activeAids.first {
+                                        onSaveBatteryLog(aid, timestamp, note, selectedPackId)
+                                    }
+                                    dismiss()
+                                },
+                                onCancel: { dismiss() },
+                                activeAids: activeAids,
+                                selectedAidId: $selectedAidId,
+                                wrapsInNavigationStack: false
+                            )
+                        } label: {
+                            AddItemActionRowLabel(title: "Battery Log", subtitle: batteryLogSubtitle, systemImage: "bolt.batteryblock")
+                        }
+                        .buttonStyle(.plain)
+                        .onAppear { selectedAidId = defaultAidId }
+                    } else {
+                        AddItemActionRowLabel(title: "Battery Log", subtitle: "Add a hearing aid first", systemImage: "bolt.batteryblock", isDisabled: true)
+                    }
+
+                    NavigationLink {
+                        AddBatteryPackSheet(
+                            existingPacks: packs.sorted { $0.purchaseDate < $1.purchaseDate },
+                            previousPack: packs.sorted { $0.purchaseDate < $1.purchaseDate }.last,
+                            onSave: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
+                                onSavePack(batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode)
+                                dismiss()
+                            },
+                            onCancel: { dismiss() },
+                            wrapsInNavigationStack: false
+                        )
+                    } label: {
+                        AddItemActionRowLabel(title: "Pack", subtitle: "Add battery inventory", systemImage: "shippingbox")
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink {
+                        AddHearingAidView()
+                    } label: {
+                        AddItemActionRowLabel(title: "Hearing Aid", subtitle: "Add a new device", systemImage: "ear")
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(16)
+            }
+            .navigationTitle("Add Item")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var batteryLogSubtitle: String {
+        if activeAids.count == 1, let onlyAid = activeAids.first {
+            return "Quick log for \(onlyAid.name)"
+        }
+        return "Log a battery change"
+    }
+}
+
+private struct AddItemActionRowLabel: View {
+    let title: String
+    let subtitle: String
+    let systemImage: String
+    var isDisabled: Bool = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.title3.weight(.semibold))
+                .frame(width: 30, height: 30)
+                .foregroundStyle(isDisabled ? .secondary : .primary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
+        .opacity(isDisabled ? 0.55 : 1)
     }
 }

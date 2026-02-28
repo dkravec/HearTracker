@@ -10,12 +10,14 @@ import SwiftData
 
 @MainActor
 final class HearingAidService {
-    func createHearingAid(name: String, model: String?, context: ModelContext) throws {
+    func createHearingAid(name: String, model: String?, batteryType: String?, context: ModelContext) throws {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModel = model?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBatteryType = batteryType?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedModel = (trimmedModel?.isEmpty == true) ? nil : trimmedModel
+        let normalizedBatteryType = (trimmedBatteryType?.isEmpty == true) ? nil : trimmedBatteryType
 
-        let hearingAid = HearingAid(name: trimmedName, model: normalizedModel)
+        let hearingAid = HearingAid(name: trimmedName, model: normalizedModel, batteryType: normalizedBatteryType)
         context.insert(hearingAid)
         try context.save()
     }
@@ -24,17 +26,20 @@ final class HearingAidService {
         _ hearingAid: HearingAid,
         name: String,
         model: String,
+        batteryType: String,
         retired: Bool,
         context: ModelContext
     ) throws {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBatteryType = batteryType.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if !trimmedName.isEmpty {
             hearingAid.name = trimmedName
         }
 
         hearingAid.model = trimmedModel.isEmpty ? nil : trimmedModel
+        hearingAid.batteryType = trimmedBatteryType.isEmpty ? nil : trimmedBatteryType
         hearingAid.retired = retired
 
         try context.save()

@@ -16,31 +16,39 @@ final class BatteryPack {
     var batteryType: String = ""
     var purchaseDate: Date = Date()
 
+    var batteriesPerPack: Int = 0
+    var numberOfPacks: Int = 0
     var quantityPurchased: Int = 0
     var quantityRemaining: Int = 0
 
     var priceAmount: Decimal?
     var currencyCode: String?   // "EUR", "CAD"
 
+    var brand: String?
     var retailer: String?
     var note: String?
 
-    var hearingAid: HearingAid?
+    @Relationship(deleteRule: .nullify, inverse: \BatteryLog.batteryPack)
+    var logs: [BatteryLog]?
 
     init(
-        hearingAid: HearingAid,
          batteryType: String,
          purchaseDate: Date = Date(),
-         quantityPurchased: Int,
+         batteriesPerPack: Int,
+         numberOfPacks: Int,
          priceAmount: Decimal? = nil,
-         currencyCode: String? = nil
+         currencyCode: String? = nil,
+         brand: String? = nil
     ) {
-        self.hearingAid = hearingAid
         self.batteryType = batteryType
         self.purchaseDate = purchaseDate
-        self.quantityPurchased = quantityPurchased
-        self.quantityRemaining = quantityPurchased
+        self.batteriesPerPack = batteriesPerPack
+        self.numberOfPacks = numberOfPacks
+        let totalBatteries = max(1, batteriesPerPack * numberOfPacks)
+        self.quantityPurchased = totalBatteries
+        self.quantityRemaining = totalBatteries
         self.priceAmount = priceAmount
         self.currencyCode = currencyCode
+        self.brand = brand
     }
 }

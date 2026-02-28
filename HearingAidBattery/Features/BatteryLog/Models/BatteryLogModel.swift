@@ -28,6 +28,8 @@ final class BatteryLog {
 
     // Link to compute duration: previous log points to the next (newer) log
     var hearingAid: HearingAid?
+    var batteryPack: BatteryPack?
+    var batteryType: String?
 
     init(
         hearingAid: HearingAid,

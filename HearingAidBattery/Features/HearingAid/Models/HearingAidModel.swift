@@ -14,17 +14,16 @@ final class HearingAid {
     var createdAt: Date = Date()
     var name: String = ""
     var model: String?
+    var batteryType: String?
     var retired: Bool = false
 
     @Relationship(deleteRule: .cascade, inverse: \BatteryLog.hearingAid)
     var logs: [BatteryLog]?
 
-    @Relationship(deleteRule: .cascade, inverse: \BatteryPack.hearingAid)
-    var packs: [BatteryPack]?
-
-    init(name: String, model: String? = nil, retired: Bool = false) {
+    init(name: String, model: String? = nil, batteryType: String? = nil, retired: Bool = false) {
         self.name = name
         self.model = model
+        self.batteryType = batteryType
         self.retired = retired
     }
 }

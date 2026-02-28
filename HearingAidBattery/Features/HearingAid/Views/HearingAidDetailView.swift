@@ -14,6 +14,7 @@ struct HearingAidDetailView: View {
 
     let aid: HearingAid
     @Query private var logs: [BatteryLog]
+    @Query(sort: \BatteryPack.purchaseDate, order: .forward) private var packs: [BatteryPack]
 
     @StateObject private var viewModel = HearingAidDetailViewModel()
     @StateObject private var batteryStatusViewModel = BatteryStatusViewModel()
@@ -36,6 +37,12 @@ struct HearingAidDetailView: View {
                 if let model = aid.model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
                     SectionHeaderView(title: model)
                 }
+                if let batteryType = aid.batteryType?.trimmingCharacters(in: .whitespacesAndNewlines), !batteryType.isEmpty {
+                    CardRowContainer {
+                        Text("Battery Type: \(batteryType)")
+                            .font(.subheadline)
+                    }
+                }
 
                 if viewModel.isEditing {
                     editSection
@@ -46,11 +53,6 @@ struct HearingAidDetailView: View {
                 }
 
                 statsSection
-
-                BatteryPackSectionView(
-                    hearingAid: aid,
-                    averageDuration: batteryStatusViewModel.avgDuration
-                )
 
                 SectionHeaderView(title: "Battery Logs")
                     .padding(.top, viewModel.isEditing ? 4 : 0)
@@ -124,11 +126,10 @@ struct HearingAidDetailView: View {
             BatteryLogSheet(
                 note: $viewModel.logNote,
                 timestamp: $viewModel.logTimestamp,
+                selectedPackId: $viewModel.selectedPackId,
+                availablePacks: availablePacks,
                 onSave: { timestamp, note in
                     viewModel.saveLog(for: aid, timestamp: timestamp, note: note, context: context)
-                },
-                onSaveWithoutNote: { timestamp in
-                    viewModel.saveLogWithoutNote(for: aid, timestamp: timestamp, context: context)
                 },
                 onCancel: {
                     viewModel.endLog()
@@ -214,6 +215,20 @@ struct HearingAidDetailView: View {
                     .autocorrectionDisabled()
                 }
 
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Battery Type")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextField(
+                        "Battery Type (optional)",
+                        text: $viewModel.editBatteryType,
+                        prompt: Text(aid.batteryType?.isEmpty == false ? (aid.batteryType ?? "") : "Battery Type (Optional)")
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                }
+
                 Toggle("Mark as retired", isOn: $viewModel.editRetired)
 
                 Divider()
@@ -268,6 +283,10 @@ struct HearingAidDetailView: View {
                 "\($0.id.uuidString)-\($0.timestamp.timeIntervalSince1970)-\($0.excludeFromStats)-\($0.excludePreviousGapFromStats)"
             }
             .joined(separator: "|")
+    }
+
+    private var availablePacks: [BatteryPack] {
+        packs.filter { $0.quantityRemaining > 0 }
     }
 
 }

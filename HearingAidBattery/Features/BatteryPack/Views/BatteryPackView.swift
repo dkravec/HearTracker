@@ -9,50 +9,39 @@ import SwiftUI
 import SwiftData
 
 struct BatteryPackListView: View {
-    let hearingAid: HearingAid
     let averageDuration: TimeInterval?
 
     var body: some View {
         BatteryPackSectionView(
-            hearingAid: hearingAid,
             averageDuration: averageDuration
         )
     }
 }
 
 struct BatteryPackView: View {
-    let hearingAid: HearingAid
     let averageDuration: TimeInterval?
 
     var body: some View {
         BatteryPackListView(
-            hearingAid: hearingAid,
             averageDuration: averageDuration
         )
     }
 }
 
+// TODO implement this view
 struct BatteryPackSectionView: View {
     @Environment(\.modelContext) private var context
 
-    let hearingAid: HearingAid
     let averageDuration: TimeInterval?
-    @Query private var packs: [BatteryPack]
+    @Query(sort: \BatteryPack.purchaseDate, order: .forward) private var packs: [BatteryPack]
 
     @State private var showsAddPackSheet: Bool = false
     @State private var packPendingDelete: BatteryPack?
 
     private let batteryPackService = BatteryPackService()
 
-    init(hearingAid: HearingAid, averageDuration: TimeInterval?) {
-        self.hearingAid = hearingAid
+    init(averageDuration: TimeInterval?) {
         self.averageDuration = averageDuration
-        let hearingAidId = hearingAid.id
-        _packs = Query(
-            filter: #Predicate<BatteryPack> { $0.hearingAid?.id == hearingAidId },
-            sort: \BatteryPack.purchaseDate,
-            order: .forward
-        )
     }
 
     var body: some View {
@@ -93,6 +82,16 @@ struct BatteryPackSectionView: View {
                                     .foregroundStyle(.secondary)
                             }
 
+                            if let brand = pack.brand, brand.isEmpty == false {
+                                Text("Brand: \(brand)")
+                                    .font(.subheadline)
+                            }
+
+                            Text("Batteries per pack: \(pack.batteriesPerPack)")
+                                .font(.subheadline)
+                            Text("Number of packs: \(pack.numberOfPacks)")
+                                .font(.subheadline)
+
                             Text("Purchased \(pack.purchaseDate.formatted(date: .abbreviated, time: .omitted))")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
@@ -100,6 +99,12 @@ struct BatteryPackSectionView: View {
                             if let priceText = priceText(for: pack) {
                                 Text(priceText)
                                     .font(.subheadline)
+                            }
+
+                            if let pricePerBatteryText = pricePerBatteryText(for: pack) {
+                                Text("Price per battery: \(pricePerBatteryText)")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -135,14 +140,17 @@ struct BatteryPackSectionView: View {
         }
         .sheet(isPresented: $showsAddPackSheet) {
             AddBatteryPackSheet(
-                onSave: { batteryType, purchaseDate, quantityPurchased, priceAmount, currencyCode in
+                existingPacks: packs,
+                previousPack: packs.last,
+                onSave: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
                     try? batteryPackService.createBatteryPack(
-                        for: hearingAid,
                         batteryType: batteryType,
                         purchaseDate: purchaseDate,
-                        quantityPurchased: quantityPurchased,
+                        batteriesPerPack: batteriesPerPack,
+                        numberOfPacks: numberOfPacks,
                         priceAmount: priceAmount,
                         currencyCode: currencyCode,
+                        brand: brand,
                         context: context
                     )
                     showsAddPackSheet = false
@@ -186,6 +194,13 @@ struct BatteryPackSectionView: View {
         return "Price: \(currencyText(amount: amount, currencyCode: currency))"
     }
 
+    private func pricePerBatteryText(for pack: BatteryPack) -> String? {
+        guard let amount = pack.priceAmount, let currency = pack.currencyCode else { return nil }
+        guard pack.quantityPurchased > 0 else { return nil }
+        let pricePerBattery = amount / Decimal(pack.quantityPurchased)
+        return currencyText(amount: pricePerBattery, currencyCode: currency)
+    }
+
     private func costPerDayText(for stat: BatteryPackCostStat) -> String {
         guard let costPerDay = stat.costPerDay else { return "Not enough data" }
         return currencyText(amount: costPerDay, currencyCode: stat.currencyCode)
@@ -200,49 +215,114 @@ struct BatteryPackSectionView: View {
     }
 }
 
-private struct AddBatteryPackSheet: View {
+struct AddBatteryPackSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
     @State private var batteryType: String = ""
+    @State private var brand: String = ""
     @State private var purchaseDate: Date = Date()
-    @State private var quantityPurchased: Int = 6
+    @State private var batteriesPerPack: Int = 6
+    @State private var numberOfPacks: Int = 1
     @State private var priceText: String = ""
     @State private var currencyCode: String = "USD"
 
-    let onSave: (String, Date, Int, Decimal?, String?) -> Void
+    let existingPacks: [BatteryPack]
+    let previousPack: BatteryPack?
+    let onSave: (String, String?, Date, Int, Int, Decimal?, String?) -> Void
     let onCancel: () -> Void
+    var wrapsInNavigationStack: Bool = true
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Pack") {
-                    TextField("Battery type (e.g. 312)", text: $batteryType)
-                    DatePicker("Purchase date", selection: $purchaseDate, displayedComponents: .date)
-                    Stepper("Quantity purchased: \(quantityPurchased)", value: $quantityPurchased, in: 1...100)
+        Group {
+            if wrapsInNavigationStack {
+                NavigationStack {
+                    formContent
                 }
+            } else {
+                formContent
+            }
+        }
+    }
 
-                Section("Optional Price") {
-                    TextField("Price amount", text: $priceText)
-                        .keyboardType(.decimalPad)
-                    TextField("Currency code", text: $currencyCode)
-                        .textInputAutocapitalization(.characters)
+    private var formContent: some View {
+        Form {
+            Section("Pack") {
+                HStack(spacing: 8) {
+                    TextField("Battery type (e.g. 312)", text: $batteryType)
+                    if batteryTypeSuggestions.isEmpty == false {
+                        Menu("Type") {
+                            ForEach(batteryTypeSuggestions, id: \.self) { suggestion in
+                                Button(suggestion) { batteryType = suggestion }
+                            }
+                        }
+                    }
+                }
+                HStack(spacing: 8) {
+                    TextField("Company / brand", text: $brand)
+                    if brandSuggestions.isEmpty == false {
+                        Menu("Brand") {
+                            ForEach(brandSuggestions, id: \.self) { suggestion in
+                                Button(suggestion) { brand = suggestion }
+                            }
+                        }
+                    }
+                }
+                DatePicker("Purchase date", selection: $purchaseDate, displayedComponents: .date)
+                Stepper("Batteries per pack: \(batteriesPerPack)", value: $batteriesPerPack, in: 1...100)
+                Stepper("Number of packs: \(numberOfPacks)", value: $numberOfPacks, in: 1...100)
+                if let previousPack {
+                    Button("Copy Previous Pack") {
+                        applyPreviousPack(previousPack)
+                    }
                 }
             }
-            .navigationTitle("Add Battery Pack")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") { onCancel() }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        onSave(
-                            batteryType.trimmingCharacters(in: .whitespacesAndNewlines),
-                            purchaseDate,
-                            quantityPurchased,
-                            decimalValue(from: priceText),
-                            normalizedCurrencyCode
-                        )
+
+            Section("Optional Price") {
+                HStack(spacing: 8) {
+                    TextField("Price amount", text: $priceText)
+                        .keyboardType(.decimalPad)
+                    if priceSuggestions.isEmpty == false {
+                        Menu("Price") {
+                            ForEach(priceSuggestions, id: \.self) { suggestion in
+                                Button(suggestion) { priceText = suggestion }
+                            }
+                        }
                     }
-                    .disabled(batteryType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+                HStack(spacing: 8) {
+                    TextField("Currency code", text: $currencyCode)
+                        .textInputAutocapitalization(.characters)
+                    if currencySuggestions.isEmpty == false {
+                        Menu("Currency") {
+                            ForEach(currencySuggestions, id: \.self) { suggestion in
+                                Button(suggestion) { currencyCode = suggestion }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Add Battery Pack")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Cancel") {
+                    onCancel()
+                }
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Save") {
+                    onSave(
+                        batteryType.trimmingCharacters(in: .whitespacesAndNewlines),
+                        normalizedBrand,
+                        purchaseDate,
+                        batteriesPerPack,
+                        numberOfPacks,
+                        decimalValue(from: priceText),
+                        normalizedCurrencyCode
+                    )
+                    dismiss()
+                }
+                .disabled(batteryType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
     }
@@ -250,6 +330,52 @@ private struct AddBatteryPackSheet: View {
     private var normalizedCurrencyCode: String? {
         let trimmed = currencyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var normalizedBrand: String? {
+        let trimmed = brand.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private var batteryTypeSuggestions: [String] {
+        uniqueStrings(existingPacks.map(\.batteryType))
+    }
+
+    private var brandSuggestions: [String] {
+        uniqueStrings(existingPacks.compactMap(\.brand))
+    }
+
+    private var currencySuggestions: [String] {
+        uniqueStrings(existingPacks.compactMap(\.currencyCode).map { $0.uppercased() })
+    }
+
+    private var priceSuggestions: [String] {
+        uniqueStrings(existingPacks.compactMap { pack in
+            guard let amount = pack.priceAmount else { return nil }
+            return NSDecimalNumber(decimal: amount).stringValue
+        })
+    }
+
+    private func uniqueStrings(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        var output: [String] = []
+        for value in values.reversed() {
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.isEmpty == false else { continue }
+            guard seen.contains(trimmed) == false else { continue }
+            seen.insert(trimmed)
+            output.append(trimmed)
+        }
+        return output
+    }
+
+    private func applyPreviousPack(_ pack: BatteryPack) {
+        batteryType = pack.batteryType
+        brand = pack.brand ?? ""
+        batteriesPerPack = max(1, pack.batteriesPerPack)
+        numberOfPacks = max(1, pack.numberOfPacks)
+        priceText = pack.priceAmount.map { NSDecimalNumber(decimal: $0).stringValue } ?? ""
+        currencyCode = pack.currencyCode ?? currencyCode
     }
 
     private func decimalValue(from input: String) -> Decimal? {
