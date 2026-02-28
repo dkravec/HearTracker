@@ -12,7 +12,18 @@
 		65ACE22B2F4A6EA9008E2B5A /* App.icon in Resources */ = {isa = PBXBuildFile; fileRef = 65ACE22A2F4A6EA9008E2B5A /* App.icon */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		6526BE782F5280BF009E6729 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 65ACE1F52F4A6721008E2B5A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 65ACE1FC2F4A6721008E2B5A;
+			remoteInfo = HearingAidBattery;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		6526BE742F5280BF009E6729 /* HearingAidBatteryTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HearingAidBatteryTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		65ACE1FD2F4A6721008E2B5A /* HearingAidBattery.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HearingAidBattery.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		65ACE2262F4A696E008E2B5A /* Readme.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = Readme.md; sourceTree = "<group>"; };
 		65ACE2282F4A6A82008E2B5A /* AGENTS.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = AGENTS.md; sourceTree = "<group>"; };
@@ -35,9 +46,9 @@
 			path = Docs;
 			sourceTree = "<group>";
 		};
-		6526BD4A2F5265F6009E6729 /* Tests */ = {
+		6526BE752F5280BF009E6729 /* HearingAidBatteryTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Tests;
+			path = HearingAidBatteryTests;
 			sourceTree = "<group>";
 		};
 		65ACE1FF2F4A6721008E2B5A /* HearingAidBattery */ = {
@@ -51,6 +62,13 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		6526BE712F5280BF009E6729 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		65ACE1FA2F4A6721008E2B5A /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -64,11 +82,11 @@
 		65ACE1F42F4A6721008E2B5A = {
 			isa = PBXGroup;
 			children = (
-				6526BD4A2F5265F6009E6729 /* Tests */,
 				6526BC182F525C90009E6729 /* Docs */,
 				65ACE22A2F4A6EA9008E2B5A /* App.icon */,
 				65ACE2262F4A696E008E2B5A /* Readme.md */,
 				65ACE1FF2F4A6721008E2B5A /* HearingAidBattery */,
+				6526BE752F5280BF009E6729 /* HearingAidBatteryTests */,
 				65ACE1FE2F4A6721008E2B5A /* Products */,
 				65ACE2282F4A6A82008E2B5A /* AGENTS.md */,
 			);
@@ -78,6 +96,7 @@
 			isa = PBXGroup;
 			children = (
 				65ACE1FD2F4A6721008E2B5A /* HearingAidBattery.app */,
+				6526BE742F5280BF009E6729 /* HearingAidBatteryTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -85,6 +104,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		6526BE732F5280BF009E6729 /* HearingAidBatteryTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6526BE7C2F5280BF009E6729 /* Build configuration list for PBXNativeTarget "HearingAidBatteryTests" */;
+			buildPhases = (
+				6526BE702F5280BF009E6729 /* Sources */,
+				6526BE712F5280BF009E6729 /* Frameworks */,
+				6526BE722F5280BF009E6729 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6526BE792F5280BF009E6729 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				6526BE752F5280BF009E6729 /* HearingAidBatteryTests */,
+			);
+			name = HearingAidBatteryTests;
+			packageProductDependencies = (
+			);
+			productName = HearingAidBatteryTests;
+			productReference = 6526BE742F5280BF009E6729 /* HearingAidBatteryTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		65ACE1FC2F4A6721008E2B5A /* HearingAidBattery */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 65ACE20B2F4A6723008E2B5A /* Build configuration list for PBXNativeTarget "HearingAidBattery" */;
@@ -99,7 +141,6 @@
 			);
 			fileSystemSynchronizedGroups = (
 				6526BC182F525C90009E6729 /* Docs */,
-				6526BD4A2F5265F6009E6729 /* Tests */,
 				65ACE1FF2F4A6721008E2B5A /* HearingAidBattery */,
 			);
 			name = HearingAidBattery;
@@ -119,6 +160,10 @@
 				LastSwiftUpdateCheck = 2630;
 				LastUpgradeCheck = 2630;
 				TargetAttributes = {
+					6526BE732F5280BF009E6729 = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 65ACE1FC2F4A6721008E2B5A;
+					};
 					65ACE1FC2F4A6721008E2B5A = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -139,11 +184,19 @@
 			projectRoot = "";
 			targets = (
 				65ACE1FC2F4A6721008E2B5A /* HearingAidBattery */,
+				6526BE732F5280BF009E6729 /* HearingAidBatteryTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		6526BE722F5280BF009E6729 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		65ACE1FB2F4A6721008E2B5A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -157,6 +210,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		6526BE702F5280BF009E6729 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		65ACE1F92F4A6721008E2B5A /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -166,7 +226,62 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		6526BE792F5280BF009E6729 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 65ACE1FC2F4A6721008E2B5A /* HearingAidBattery */;
+			targetProxy = 6526BE782F5280BF009E6729 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		6526BE7A2F5280BF009E6729 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VHCWBN8GY3;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.novapro.HearingAidBatteryTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HearingAidBattery.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HearingAidBattery";
+			};
+			name = Debug;
+		};
+		6526BE7B2F5280BF009E6729 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = VHCWBN8GY3;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.novapro.HearingAidBatteryTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HearingAidBattery.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HearingAidBattery";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		65ACE20C2F4A6723008E2B5A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -380,6 +495,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6526BE7C2F5280BF009E6729 /* Build configuration list for PBXNativeTarget "HearingAidBatteryTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6526BE7A2F5280BF009E6729 /* Debug */,
+				6526BE7B2F5280BF009E6729 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		65ACE1F82F4A6721008E2B5A /* Build configuration list for PBXProject "HearingAidBattery" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

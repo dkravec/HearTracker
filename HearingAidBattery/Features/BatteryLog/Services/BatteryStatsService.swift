@@ -67,6 +67,8 @@ final class BatteryStatsService: BatteryStatsProviding {
         let completedDurations = sortedLogs.enumerated().compactMap { index, log -> TimeInterval? in
             guard index > 0 else { return nil }
             let newerLog = sortedLogs[index - 1]
+            guard log.excludeFromStats == false else { return nil }
+            guard newerLog.excludePreviousGapFromStats == false else { return nil }
             let duration = newerLog.timestamp.timeIntervalSince(log.timestamp)
             return duration > 0 ? duration : nil
         }

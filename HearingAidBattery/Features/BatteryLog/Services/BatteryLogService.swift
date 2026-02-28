@@ -10,21 +10,33 @@ import SwiftData
 
 @MainActor
 protocol BatteryLogProviding {
-    func quickLog(for hearingAid: HearingAid, note: String?, context: ModelContext) throws
-    func updateLog(_ log: BatteryLog, timestamp: Date, note: String?, context: ModelContext) throws
+    func quickLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) throws
+    func updateLog(
+        _ log: BatteryLog,
+        timestamp: Date,
+        note: String?,
+        excludeFromStats: Bool,
+        excludePreviousGapFromStats: Bool,
+        context: ModelContext
+    ) throws
     func deleteLog(_ log: BatteryLog, context: ModelContext) throws
     func deleteLogs(at offsets: IndexSet, from logs: [BatteryLog], context: ModelContext) throws
 }
 
 @MainActor
 final class BatteryLogService: BatteryLogProviding {
-    func quickLog(for hearingAid: HearingAid, note: String? = nil, context: ModelContext) throws {
+    func quickLog(
+        for hearingAid: HearingAid,
+        timestamp: Date = Date(),
+        note: String? = nil,
+        context: ModelContext
+    ) throws {
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNote = (trimmedNote?.isEmpty == true) ? nil : trimmedNote
 
         let newLog = BatteryLog(
             hearingAid: hearingAid,
-            timestamp: Date(),
+            timestamp: timestamp,
             note: normalizedNote
         )
 
@@ -32,12 +44,21 @@ final class BatteryLogService: BatteryLogProviding {
         try context.save()
     }
 
-    func updateLog(_ log: BatteryLog, timestamp: Date, note: String?, context: ModelContext) throws {
+    func updateLog(
+        _ log: BatteryLog,
+        timestamp: Date,
+        note: String?,
+        excludeFromStats: Bool,
+        excludePreviousGapFromStats: Bool,
+        context: ModelContext
+    ) throws {
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNote = (trimmedNote?.isEmpty == true) ? nil : trimmedNote
 
         log.timestamp = timestamp
         log.note = normalizedNote
+        log.excludeFromStats = excludeFromStats
+        log.excludePreviousGapFromStats = excludePreviousGapFromStats
 
         try context.save()
     }

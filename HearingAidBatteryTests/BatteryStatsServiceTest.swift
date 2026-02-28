@@ -5,7 +5,6 @@
 //  Created by Daniel Kravec on 2026-02-27.
 //
 
-#if canImport(Testing)
 import Foundation
 import SwiftData
 import Testing
@@ -14,6 +13,7 @@ import Testing
 @MainActor
 struct BatteryStatsServiceTests {
     @Test
+    // Verifies the newest timestamp is treated as the current battery log.
     func currentLogSelectionUsesNewestTimestamp() {
         let service = BatteryStatsService()
         let aid = HearingAid(name: "A")
@@ -28,6 +28,7 @@ struct BatteryStatsServiceTests {
     }
 
     @Test
+    // Verifies completed durations are only formed from logs that have a newer neighbor.
     func durationsExcludeCurrentLogWithoutNextLog() {
         let service = BatteryStatsService()
         let aid = HearingAid(name: "A")
@@ -43,6 +44,7 @@ struct BatteryStatsServiceTests {
     }
 
     @Test
+    // Verifies the rolling window keeps only the most recent N completed durations.
     func rollingWindowUsesMostRecentNDurations() {
         let service = BatteryStatsService()
         let aid = HearingAid(name: "A")
@@ -59,6 +61,7 @@ struct BatteryStatsServiceTests {
     }
 
     @Test
+    // Verifies prediction is computed as current log timestamp plus average duration.
     func predictedDeathEqualsCurrentInsertedAtPlusAverageDuration() {
         let service = BatteryStatsService()
         let aid = HearingAid(name: "A")
@@ -73,6 +76,43 @@ struct BatteryStatsServiceTests {
     }
 
     @Test
+    // Verifies excludeFromStats=true removes that battery interval from samples.
+    func excludeFromStatsTrueExcludesThatBatteryDuration() {
+        let service = BatteryStatsService()
+        let aid = HearingAid(name: "A")
+
+        let current = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 4_000))
+        let previous = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 3_000), excludeFromStats: true)
+        let old = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 1_000))
+
+        let snapshot = service.statsSnapshot(from: [current, previous, old], windowSize: 0, referenceDate: Date(timeIntervalSince1970: 5_000))
+
+        #expect(snapshot.sampleCount == 1)
+        #expect(snapshot.lastCompletedDuration == 2_000)
+    }
+
+    @Test
+    // Verifies excludePreviousGapFromStats=true removes the incoming gap into that log.
+    func excludePreviousGapFromStatsExcludesIncomingDuration() {
+        let service = BatteryStatsService()
+        let aid = HearingAid(name: "A")
+
+        let current = BatteryLog(
+            hearingAid: aid,
+            timestamp: Date(timeIntervalSince1970: 4_000),
+            excludePreviousGapFromStats: true
+        )
+        let previous = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 3_000))
+        let old = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 1_000))
+
+        let snapshot = service.statsSnapshot(from: [current, previous, old], windowSize: 0, referenceDate: Date(timeIntervalSince1970: 5_000))
+
+        #expect(snapshot.sampleCount == 1)
+        #expect(snapshot.lastCompletedDuration == 2_000)
+    }
+
+    @Test
+    // Verifies the status view model mirrors values from its stats provider.
     func batteryStatusViewModelUsesProviderSnapshot() throws {
         let expectedSnapshot = BatteryStatsSnapshot(
             currentLogId: UUID(),
@@ -116,4 +156,3 @@ private struct InMemoryBatteryStatsProvider: BatteryStatsProviding {
         snapshot
     }
 }
-#endif

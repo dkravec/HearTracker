@@ -85,11 +85,12 @@ struct HearingAidListView: View {
         .sheet(item: $viewModel.logTargetAid) { aid in
             BatteryLogSheet(
                 note: $viewModel.logNote,
-                onSave: { note in
-                    viewModel.saveLog(for: aid, note: note, context: context)
+                timestamp: $viewModel.logTimestamp,
+                onSave: { timestamp, note in
+                    viewModel.saveLog(for: aid, timestamp: timestamp, note: note, context: context)
                 },
-                onSaveWithoutNote: {
-                    viewModel.saveLogWithoutNote(for: aid, context: context)
+                onSaveWithoutNote: { timestamp in
+                    viewModel.saveLogWithoutNote(for: aid, timestamp: timestamp, context: context)
                 },
                 onCancel: {
                     viewModel.endLog()

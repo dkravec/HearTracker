@@ -18,6 +18,7 @@ final class HearingAidDetailViewModel: ObservableObject {
     @Published var showsDeleteAlert: Bool = false
     @Published var showsLogSheet: Bool = false
     @Published var logNote: String = ""
+    @Published var logTimestamp: Date = Date()
 
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
@@ -70,8 +71,22 @@ final class HearingAidDetailViewModel: ObservableObject {
         try? hearingAidService.deleteHearingAid(hearingAid, context: context)
     }
 
-    func updateLog(_ log: BatteryLog, timestamp: Date, note: String?, context: ModelContext) {
-        try? batteryLogService.updateLog(log, timestamp: timestamp, note: note, context: context)
+    func updateLog(
+        _ log: BatteryLog,
+        timestamp: Date,
+        note: String?,
+        excludeFromStats: Bool,
+        excludePreviousGapFromStats: Bool,
+        context: ModelContext
+    ) {
+        try? batteryLogService.updateLog(
+            log,
+            timestamp: timestamp,
+            note: note,
+            excludeFromStats: excludeFromStats,
+            excludePreviousGapFromStats: excludePreviousGapFromStats,
+            context: context
+        )
     }
 
     func deleteLog(_ log: BatteryLog, context: ModelContext) {
@@ -84,21 +99,23 @@ final class HearingAidDetailViewModel: ObservableObject {
 
     func beginLog() {
         logNote = ""
+        logTimestamp = Date()
         showsLogSheet = true
     }
 
     func endLog() {
         logNote = ""
+        logTimestamp = Date()
         showsLogSheet = false
     }
 
-    func saveLog(for hearingAid: HearingAid, note: String?, context: ModelContext) {
-        try? batteryLogService.quickLog(for: hearingAid, note: note, context: context)
+    func saveLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) {
+        try? batteryLogService.quickLog(for: hearingAid, timestamp: timestamp, note: note, context: context)
         endLog()
     }
 
-    func saveLogWithoutNote(for hearingAid: HearingAid, context: ModelContext) {
-        try? batteryLogService.quickLog(for: hearingAid, note: nil, context: context)
+    func saveLogWithoutNote(for hearingAid: HearingAid, timestamp: Date, context: ModelContext) {
+        try? batteryLogService.quickLog(for: hearingAid, timestamp: timestamp, note: nil, context: context)
         endLog()
     }
 }

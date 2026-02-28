@@ -20,18 +20,26 @@ final class BatteryLog {
     var timestamp: Date = Date()
     var note: String?
     
-    // If false, duration to the next log is excluded
-    var includeInStats: Bool = true
+    // If true, duration to the next log is excluded
+    var excludeFromStats: Bool = false
     
-    // If true, extra length will be excluded 
-    var forgotPrevious: Bool = false
+    // If true, duration from previous log to this log is excluded
+    var excludePreviousGapFromStats: Bool = false
 
     // Link to compute duration: previous log points to the next (newer) log
     var hearingAid: HearingAid?
 
-    init(hearingAid: HearingAid, timestamp: Date = Date(), note: String? = nil) {
+    init(
+        hearingAid: HearingAid,
+        timestamp: Date = Date(),
+        note: String? = nil,
+        excludeFromStats: Bool = false,
+        excludePreviousGapFromStats: Bool = false
+    ) {
         self.hearingAid = hearingAid
         self.timestamp = timestamp
         self.note = note
+        self.excludeFromStats = excludeFromStats
+        self.excludePreviousGapFromStats = excludePreviousGapFromStats
     }
 }

@@ -35,8 +35,15 @@ struct BatteryLogDetailContainer: View {
             BatteryLogDetailView(
                 log: log,
                 rowModel: rowModel,
-                onSave: { timestamp, note in
-                    try? batteryLogService.updateLog(log, timestamp: timestamp, note: note, context: context)
+                onSave: { timestamp, note, excludeFromStats, excludePreviousGapFromStats in
+                    try? batteryLogService.updateLog(
+                        log,
+                        timestamp: timestamp,
+                        note: note,
+                        excludeFromStats: excludeFromStats,
+                        excludePreviousGapFromStats: excludePreviousGapFromStats,
+                        context: context
+                    )
                 },
                 onDelete: {
                     try? batteryLogService.deleteLog(log, context: context)
@@ -73,18 +80,20 @@ struct BatteryLogDetailView: View {
 
     let log: BatteryLog
     let rowModel: BatteryLogRowModel
-    let onSave: (Date, String?) -> Void
+    let onSave: (Date, String?, Bool, Bool) -> Void
     let onDelete: () -> Void
 
     @State private var isEditing: Bool = false
     @State private var showsDeleteAlert: Bool = false
     @State private var draftTimestamp: Date
     @State private var draftNote: String
+    @State private var draftExcludeFromStats: Bool
+    @State private var draftExcludePreviousGapFromStats: Bool
 
     init(
         log: BatteryLog,
         rowModel: BatteryLogRowModel,
-        onSave: @escaping (Date, String?) -> Void,
+        onSave: @escaping (Date, String?, Bool, Bool) -> Void,
         onDelete: @escaping () -> Void
     ) {
         self.log = log
@@ -93,6 +102,8 @@ struct BatteryLogDetailView: View {
         self.onDelete = onDelete
         _draftTimestamp = State(initialValue: log.timestamp)
         _draftNote = State(initialValue: log.note ?? "")
+        _draftExcludeFromStats = State(initialValue: log.excludeFromStats)
+        _draftExcludePreviousGapFromStats = State(initialValue: log.excludePreviousGapFromStats)
     }
 
     var body: some View {
@@ -128,7 +139,12 @@ struct BatteryLogDetailView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         let trimmed = draftNote.trimmingCharacters(in: .whitespacesAndNewlines)
-                        onSave(draftTimestamp, trimmed.isEmpty ? nil : trimmed)
+                        onSave(
+                            draftTimestamp,
+                            trimmed.isEmpty ? nil : trimmed,
+                            draftExcludeFromStats,
+                            draftExcludePreviousGapFromStats
+                        )
                         isEditing = false
                     }
                     .fontWeight(.semibold)
@@ -221,6 +237,9 @@ struct BatteryLogDetailView: View {
                         .lineLimit(1...4)
                         .textFieldStyle(.roundedBorder)
                 }
+
+                Toggle("Exclude this battery from averages", isOn: $draftExcludeFromStats)
+                Toggle("Forgot previous log (exclude previous gap)", isOn: $draftExcludePreviousGapFromStats)
             }
         }
     }
@@ -228,12 +247,16 @@ struct BatteryLogDetailView: View {
     private func beginEditing() {
         draftTimestamp = log.timestamp
         draftNote = log.note ?? ""
+        draftExcludeFromStats = log.excludeFromStats
+        draftExcludePreviousGapFromStats = log.excludePreviousGapFromStats
         isEditing = true
     }
 
     private func cancelEditing() {
         draftTimestamp = log.timestamp
         draftNote = log.note ?? ""
+        draftExcludeFromStats = log.excludeFromStats
+        draftExcludePreviousGapFromStats = log.excludePreviousGapFromStats
         isEditing = false
     }
 }

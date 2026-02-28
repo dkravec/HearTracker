@@ -9,13 +9,22 @@ import SwiftUI
 
 struct BatteryLogSheet: View {
     @Binding var note: String
-    let onSave: (String?) -> Void
-    let onSaveWithoutNote: () -> Void
+    @Binding var timestamp: Date
+    let onSave: (Date, String?) -> Void
+    let onSaveWithoutNote: (Date) -> Void
     let onCancel: () -> Void
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Logged At") {
+                    DatePicker(
+                        "Timestamp",
+                        selection: $timestamp,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                }
+
                 Section {
                     TextField("Add a note (optional)", text: $note, axis: .vertical)
                         .lineLimit(1...3)
@@ -26,8 +35,8 @@ struct BatteryLogSheet: View {
                 }
 
                 Section {
-                    Button("Save Without Note") {
-                        onSaveWithoutNote()
+                    Button("Save Log") {
+                        onSaveWithoutNote(timestamp)
                     }
                 }
             }
@@ -39,7 +48,7 @@ struct BatteryLogSheet: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         let trimmed = note.trimmingCharacters(in: .whitespacesAndNewlines)
-                        onSave(trimmed.isEmpty ? nil : trimmed)
+                        onSave(timestamp, trimmed.isEmpty ? nil : trimmed)
                     }
                     .buttonStyle(.borderedProminent)
                 }

@@ -56,6 +56,14 @@ struct HearingAidDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(viewModel.isEditing)
+                    .contextMenu {
+                        if log.excludeFromStats == false {
+                            Button("Exclude from averages") {
+                                log.excludeFromStats = true
+                                try? context.save()
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 16)
@@ -102,11 +110,12 @@ struct HearingAidDetailView: View {
         .sheet(isPresented: $viewModel.showsLogSheet) {
             BatteryLogSheet(
                 note: $viewModel.logNote,
-                onSave: { note in
-                    viewModel.saveLog(for: aid, note: note, context: context)
+                timestamp: $viewModel.logTimestamp,
+                onSave: { timestamp, note in
+                    viewModel.saveLog(for: aid, timestamp: timestamp, note: note, context: context)
                 },
-                onSaveWithoutNote: {
-                    viewModel.saveLogWithoutNote(for: aid, context: context)
+                onSaveWithoutNote: { timestamp in
+                    viewModel.saveLogWithoutNote(for: aid, timestamp: timestamp, context: context)
                 },
                 onCancel: {
                     viewModel.endLog()
