@@ -8,6 +8,20 @@
 import Foundation
 import SwiftData
 
+enum BatteryPackServiceError: LocalizedError {
+    case invalidUsageCount
+    case usageExceedsAvailable
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidUsageCount:
+            return "Enter at least 1 battery."
+        case .usageExceedsAvailable:
+            return "Cannot use more batteries than are remaining in this pack."
+        }
+    }
+}
+
 struct BatteryPackCostStat {
     let currencyCode: String
     let averageCostPerBattery: Decimal
@@ -28,25 +42,106 @@ final class BatteryPackService {
         note: String? = nil,
         context: ModelContext
     ) throws {
-        let pack = BatteryPack(
+        let normalized = normalizedPackInput(
             batteryType: batteryType,
-            purchaseDate: purchaseDate,
             batteriesPerPack: batteriesPerPack,
             numberOfPacks: numberOfPacks,
+            brand: brand,
+            retailer: retailer,
+            note: note,
             priceAmount: priceAmount,
-            currencyCode: currencyCode,
-            brand: brand?.trimmingCharacters(in: .whitespacesAndNewlines)
+            currencyCode: currencyCode
+        )
+        let pack = BatteryPack(
+            batteryType: normalized.batteryType,
+            purchaseDate: purchaseDate,
+            batteriesPerPack: normalized.batteriesPerPack,
+            numberOfPacks: normalized.numberOfPacks,
+            priceAmount: normalized.priceAmount,
+            currencyCode: normalized.currencyCode,
+            brand: normalized.brand
         )
 
-        pack.retailer = retailer?.trimmingCharacters(in: .whitespacesAndNewlines)
-        pack.note = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        pack.retailer = normalized.retailer
+        pack.note = normalized.note
 
         context.insert(pack)
         try context.save()
     }
 
-    func deleteBatteryPack(_ batteryPack: BatteryPack, context: ModelContext) throws {
+    func updatePack(
+        _ batteryPack: BatteryPack,
+        batteryType: String,
+        purchaseDate: Date,
+        batteriesPerPack: Int,
+        numberOfPacks: Int,
+        priceAmount: Decimal? = nil,
+        currencyCode: String? = nil,
+        brand: String? = nil,
+        retailer: String? = nil,
+        note: String? = nil,
+        context: ModelContext
+    ) throws {
+        let normalized = normalizedPackInput(
+            batteryType: batteryType,
+            batteriesPerPack: batteriesPerPack,
+            numberOfPacks: numberOfPacks,
+            brand: brand,
+            retailer: retailer,
+            note: note,
+            priceAmount: priceAmount,
+            currencyCode: currencyCode
+        )
+
+        let usedCount = usedBatteries(for: batteryPack)
+        let purchased = normalized.batteriesPerPack * normalized.numberOfPacks
+
+        batteryPack.batteryType = normalized.batteryType
+        batteryPack.purchaseDate = purchaseDate
+        batteryPack.batteriesPerPack = normalized.batteriesPerPack
+        batteryPack.numberOfPacks = normalized.numberOfPacks
+        batteryPack.quantityPurchased = purchased
+        batteryPack.quantityRemaining = remainingBatteries(purchased: purchased, used: usedCount)
+        batteryPack.priceAmount = normalized.priceAmount
+        batteryPack.currencyCode = normalized.currencyCode
+        batteryPack.brand = normalized.brand
+        batteryPack.retailer = normalized.retailer
+        batteryPack.note = normalized.note
+
+        try context.save()
+    }
+
+    func deletePack(_ batteryPack: BatteryPack, context: ModelContext) throws {
         context.delete(batteryPack)
+        try context.save()
+    }
+
+    func useBatteries(
+        _ countUsed: Int,
+        note: String? = nil,
+        timestamp: Date = Date(),
+        from batteryPack: BatteryPack,
+        context: ModelContext
+    ) throws {
+        let normalizedCount = max(0, countUsed)
+        guard normalizedCount > 0 else {
+            throw BatteryPackServiceError.invalidUsageCount
+        }
+        guard normalizedCount <= batteryPack.quantityRemaining else {
+            throw BatteryPackServiceError.usageExceedsAvailable
+        }
+
+        applyUsage(count: normalizedCount, to: batteryPack)
+        appendUsageNote(note, count: normalizedCount, timestamp: timestamp, to: batteryPack)
+        try context.save()
+    }
+
+    func restoreOneBattery(
+        in batteryPack: BatteryPack,
+        context: ModelContext
+    ) throws {
+        guard batteryPack.quantityRemaining < batteryPack.quantityPurchased else { return }
+        batteryPack.quantityRemaining += 1
         try context.save()
     }
 
@@ -81,7 +176,7 @@ final class BatteryPackService {
             return nil
         }
 
-        packToConsume.quantityRemaining -= 1
+        applyUsage(count: 1, to: packToConsume)
         return packToConsume
     }
 
@@ -123,5 +218,68 @@ final class BatteryPackService {
                 costPerDay: costPerDay
             )
         }
+    }
+
+    private func remainingBatteries(purchased: Int, used: Int) -> Int {
+        max(0, purchased - max(0, used))
+    }
+
+    private func usedBatteries(for pack: BatteryPack) -> Int {
+        max(0, pack.quantityPurchased - pack.quantityRemaining)
+    }
+
+    private func applyUsage(count: Int, to pack: BatteryPack) {
+        let used = usedBatteries(for: pack) + max(0, count)
+        pack.quantityRemaining = remainingBatteries(purchased: pack.quantityPurchased, used: used)
+    }
+
+    private func appendUsageNote(_ note: String?, count: Int, timestamp: Date, to pack: BatteryPack) {
+        let trimmed = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard trimmed.isEmpty == false else { return }
+        let entry = "[\(timestamp.formatted(date: .abbreviated, time: .shortened))] Used \(count): \(trimmed)"
+        let existing = pack.note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        pack.note = existing.isEmpty ? entry : "\(existing)\n\(entry)"
+    }
+
+    private func normalizedPackInput(
+        batteryType: String,
+        batteriesPerPack: Int,
+        numberOfPacks: Int,
+        brand: String?,
+        retailer: String?,
+        note: String?,
+        priceAmount: Decimal?,
+        currencyCode: String?
+    ) -> (
+        batteryType: String,
+        batteriesPerPack: Int,
+        numberOfPacks: Int,
+        brand: String?,
+        retailer: String?,
+        note: String?,
+        priceAmount: Decimal?,
+        currencyCode: String?
+    ) {
+        let normalizedType = batteryType.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedBrand = normalizedOptionalText(brand)
+        let normalizedRetailer = normalizedOptionalText(retailer)
+        let normalizedNote = normalizedOptionalText(note)
+        let normalizedCurrency = normalizedOptionalText(currencyCode)?.uppercased()
+        return (
+            batteryType: normalizedType,
+            batteriesPerPack: max(1, batteriesPerPack),
+            numberOfPacks: max(1, numberOfPacks),
+            brand: normalizedBrand,
+            retailer: normalizedRetailer,
+            note: normalizedNote,
+            priceAmount: priceAmount,
+            currencyCode: normalizedCurrency
+        )
+    }
+
+    private func normalizedOptionalText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

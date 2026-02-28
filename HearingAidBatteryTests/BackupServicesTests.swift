@@ -50,7 +50,7 @@ struct BackupServicesTests {
         let targetContainer = try makeContainer()
         let targetContext = ModelContext(targetContainer)
         let importService = BackupImportService()
-        try importService.importJSONData(data, context: targetContext)
+        _ = try importService.importJSONData(data, context: targetContext)
 
         #expect(((try? targetContext.fetch(FetchDescriptor<HearingAid>())) ?? []).count == 1)
         #expect(((try? targetContext.fetch(FetchDescriptor<BatteryLog>())) ?? []).count == 1)
@@ -311,12 +311,12 @@ struct BackupServicesTests {
     ) {
         let importService = BackupImportService()
         do {
-            try importService.importJSONData(data, context: context)
-            Issue.record(failureMessage)
+            _ = try importService.importJSONData(data, context: context)
+            Issue.record(NSError(domain: "BackupServicesTests", code: 1, userInfo: [NSLocalizedDescriptionKey: failureMessage]))
         } catch let error as BackupImportService.BackupImportError {
             #expect(matches(error))
         } catch {
-            Issue.record("Unexpected non-import error: \(error)")
+            Issue.record(NSError(domain: "BackupServicesTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "Unexpected non-import error: \(error)"]))
         }
     }
 }

@@ -21,6 +21,8 @@ struct BatteryPackListView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
+        .navigationTitle("Battery Packs")
+        .navigationBarTitleDisplayMode(.inline)
         .appBackground()
     }
 }
@@ -44,6 +46,9 @@ struct BatteryPackSectionView: View {
 
     @State private var showsAddPackSheet: Bool = false
     @State private var packPendingDelete: BatteryPack?
+    @State private var packPendingEdit: BatteryPack?
+    @State private var packPendingUsage: BatteryPack?
+    @State private var errorMessage: String?
 
     private let batteryPackService = BatteryPackService()
 
@@ -78,44 +83,22 @@ struct BatteryPackSectionView: View {
                 }
             } else {
                 ForEach(packs) { pack in
-                    CardRowContainer {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(pack.batteryType)
-                                    .font(.headline)
-                                Spacer(minLength: 8)
-                                Text("\(pack.quantityRemaining)/\(pack.quantityPurchased) left")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            if let brand = pack.brand, brand.isEmpty == false {
-                                Text("Brand: \(brand)")
-                                    .font(.subheadline)
-                            }
-
-                            Text("Batteries per pack: \(pack.batteriesPerPack)")
-                                .font(.subheadline)
-                            Text("Number of packs: \(pack.numberOfPacks)")
-                                .font(.subheadline)
-
-                            Text("Purchased \(pack.purchaseDate.formatted(date: .abbreviated, time: .omitted))")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-
-                            if let priceText = priceText(for: pack) {
-                                Text(priceText)
-                                    .font(.subheadline)
-                            }
-
-                            if let ppb = CurrencyFormatter.shared.pricePerBattery(priceAmount: pack.priceAmount, quantityPurchased: pack.quantityPurchased, currencyCode: pack.currencyCode) {
-                                Text("Price per battery: \(ppb)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                    NavigableCardRow {
+                        BatteryPackDetailView(
+                            pack: pack,
+                            existingPacks: packs,
+                            averageDuration: averageDuration
+                        )
+                    } content: {
+                        BatteryPackCardBody(pack: pack)
                     }
                     .contextMenu {
+                        Button("Edit Pack") {
+                            packPendingEdit = pack
+                        }
+                        Button("Use Batteries…") {
+                            packPendingUsage = pack
+                        }
                         Button("Delete Pack", role: .destructive) {
                             packPendingDelete = pack
                         }
@@ -137,7 +120,7 @@ struct BatteryPackSectionView: View {
                             Text("Avg cost per battery: \(CurrencyFormatter.shared.format(stat.averageCostPerBattery, currencyCode: stat.currencyCode))")
                                 .font(.subheadline)
 
-                            Text("Cost per day: \(costPerDayText(for: stat))")
+                            Text("Cost per day: \(formattedCostPerDay(for: stat))")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
@@ -149,6 +132,8 @@ struct BatteryPackSectionView: View {
             AddBatteryPackSheet(
                 existingPacks: packs,
                 previousPack: packs.last,
+                title: "Add Battery Pack",
+                saveButtonTitle: "Save",
                 onSave: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
                     try? batteryPackService.createBatteryPack(
                         batteryType: batteryType,
@@ -170,10 +155,50 @@ struct BatteryPackSectionView: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
+        .sheet(item: $packPendingEdit) { pack in
+            EditBatteryPackSheet(
+                pack: pack,
+                existingPacks: packs,
+                batteryPackService: batteryPackService,
+                errorMessage: $errorMessage,
+                onClose: {
+                    packPendingEdit = nil
+                }
+            )
+        }
+        .sheet(item: $packPendingUsage) { pack in
+            UseBatteriesSheet(
+                pack: pack,
+                onSave: { count, note, timestamp in
+                    do {
+                        try batteryPackService.useBatteries(
+                            count,
+                            note: note,
+                            timestamp: timestamp,
+                            from: pack,
+                            context: context
+                        )
+                        packPendingUsage = nil
+                    } catch {
+                        errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    }
+                },
+                onCancel: {
+                    packPendingUsage = nil
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .appBackground()
+        }
         .alert("Delete Battery Pack?", isPresented: deleteAlertBinding) {
             Button("Delete", role: .destructive) {
                 if let packPendingDelete {
-                    try? batteryPackService.deleteBatteryPack(packPendingDelete, context: context)
+                    do {
+                        try batteryPackService.deletePack(packPendingDelete, context: context)
+                    } catch {
+                        errorMessage = "Could not delete battery pack."
+                    }
                 }
                 packPendingDelete = nil
             }
@@ -183,6 +208,7 @@ struct BatteryPackSectionView: View {
         } message: {
             Text("This action cannot be undone.")
         }
+        .errorAlert(title: "Unable to Complete Action", message: $errorMessage)
     }
 
     private var deleteAlertBinding: Binding<Bool> {
@@ -196,15 +222,6 @@ struct BatteryPackSectionView: View {
         )
     }
 
-    private func priceText(for pack: BatteryPack) -> String? {
-        guard let amount = pack.priceAmount, let currency = pack.currencyCode else { return nil }
-        return "Price: \(CurrencyFormatter.shared.format(amount, currencyCode: currency))"
-    }
-
-    private func costPerDayText(for stat: BatteryPackCostStat) -> String {
-        guard let costPerDay = stat.costPerDay else { return "Not enough data" }
-        return CurrencyFormatter.shared.format(costPerDay, currencyCode: stat.currencyCode)
-    }
 }
 
 struct AddBatteryPackSheet: View {
@@ -223,9 +240,50 @@ struct AddBatteryPackSheet: View {
 
     let existingPacks: [BatteryPack]
     let previousPack: BatteryPack?
+    let title: String
+    let saveButtonTitle: String
+    let initialBatteryType: String
+    let initialBrand: String
+    let initialPurchaseDate: Date
+    let initialBatteriesPerPack: Int
+    let initialNumberOfPacks: Int
+    let initialPriceText: String
+    let initialCurrencyCode: String
     let onSave: (String, String?, Date, Int, Int, Decimal?, String?) -> Void
     let onCancel: () -> Void
     var wrapsInNavigationStack: Bool = true
+
+    init(
+        existingPacks: [BatteryPack],
+        previousPack: BatteryPack?,
+        title: String = "Add Battery Pack",
+        saveButtonTitle: String = "Save",
+        initialBatteryType: String = "",
+        initialBrand: String = "",
+        initialPurchaseDate: Date = Date(),
+        initialBatteriesPerPack: Int = 6,
+        initialNumberOfPacks: Int = 1,
+        initialPriceText: String = "",
+        initialCurrencyCode: String = CurrencyFormatter.localeCurrencyCode,
+        onSave: @escaping (String, String?, Date, Int, Int, Decimal?, String?) -> Void,
+        onCancel: @escaping () -> Void,
+        wrapsInNavigationStack: Bool = true
+    ) {
+        self.existingPacks = existingPacks
+        self.previousPack = previousPack
+        self.title = title
+        self.saveButtonTitle = saveButtonTitle
+        self.initialBatteryType = initialBatteryType
+        self.initialBrand = initialBrand
+        self.initialPurchaseDate = initialPurchaseDate
+        self.initialBatteriesPerPack = initialBatteriesPerPack
+        self.initialNumberOfPacks = initialNumberOfPacks
+        self.initialPriceText = initialPriceText
+        self.initialCurrencyCode = initialCurrencyCode
+        self.onSave = onSave
+        self.onCancel = onCancel
+        self.wrapsInNavigationStack = wrapsInNavigationStack
+    }
 
     var body: some View {
         Group {
@@ -236,6 +294,15 @@ struct AddBatteryPackSheet: View {
             } else {
                 formContent
             }
+        }
+        .onAppear {
+            batteryType = initialBatteryType
+            brand = initialBrand
+            purchaseDate = initialPurchaseDate
+            batteriesPerPack = initialBatteriesPerPack
+            numberOfPacks = initialNumberOfPacks
+            priceText = initialPriceText
+            currencyCode = initialCurrencyCode
         }
     }
 
@@ -297,7 +364,7 @@ struct AddBatteryPackSheet: View {
                 }
             }
         }
-        .navigationTitle("Add Battery Pack")
+        .navigationTitle(title)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Cancel") {
@@ -305,7 +372,7 @@ struct AddBatteryPackSheet: View {
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Save") {
+                Button(saveButtonTitle) {
                     onSave(
                         batteryType.trimmingCharacters(in: .whitespacesAndNewlines),
                         normalizedBrand,
@@ -386,5 +453,277 @@ struct AddBatteryPackSheet: View {
 
     private func decimalValue(from input: String) -> Decimal? {
         CurrencyFormatter.decimalFromInput(input)
+    }
+}
+
+struct BatteryPackCardBody: View {
+    let pack: BatteryPack
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(pack.batteryType)
+                    .font(.headline)
+                Spacer(minLength: 8)
+                Text("\(pack.quantityRemaining)/\(pack.quantityPurchased) left")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            if let brand = pack.brand, brand.isEmpty == false {
+                Text("Brand: \(brand)")
+                    .font(.subheadline)
+            }
+
+            Text("Batteries per pack: \(pack.batteriesPerPack)")
+                .font(.subheadline)
+            Text("Number of packs: \(pack.numberOfPacks)")
+                .font(.subheadline)
+
+            Text("Purchased \(pack.purchaseDate.formatted(date: .abbreviated, time: .omitted))")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            if let amount = pack.priceAmount, let code = pack.currencyCode {
+                Text("Price: \(CurrencyFormatter.shared.format(amount, currencyCode: code))")
+                    .font(.subheadline)
+            }
+
+            if let ppb = CurrencyFormatter.shared.pricePerBattery(priceAmount: pack.priceAmount, quantityPurchased: pack.quantityPurchased, currencyCode: pack.currencyCode) {
+                Text("Price per battery: \(ppb)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+struct BatteryPackDetailView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+
+    let pack: BatteryPack
+    let existingPacks: [BatteryPack]
+    let averageDuration: TimeInterval?
+
+    @State private var showsEditSheet: Bool = false
+    @State private var showsDeleteConfirm: Bool = false
+    @State private var errorMessage: String?
+
+    private let batteryPackService = BatteryPackService()
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                SectionHeaderView(title: "Battery Pack")
+                CardRowContainer {
+                    BatteryPackCardBody(pack: pack)
+                }
+
+                if let stat = batteryPackService
+                    .costStatsByCurrency(from: [pack], averageDuration: averageDuration)
+                    .first {
+                    SectionHeaderView(title: "Cost")
+                    CardRowContainer {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Avg cost per battery: \(CurrencyFormatter.shared.format(stat.averageCostPerBattery, currencyCode: stat.currencyCode))")
+                                .font(.subheadline)
+                            Text("Cost per day: \(formattedCostPerDay(for: stat))")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                CardRowContainer {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Use Batteries")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 12) {
+                            Button {
+                                do {
+                                    try batteryPackService.restoreOneBattery(in: pack, context: context)
+                                } catch {
+                                    errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                                }
+                            } label: {
+                                Image(systemName: "minus")
+                                    .font(.headline)
+                                    .frame(width: 34, height: 34)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(pack.quantityRemaining >= pack.quantityPurchased)
+
+                            Text("\(pack.quantityRemaining) remaining")
+                                .font(.subheadline.weight(.semibold))
+
+                            Button {
+                                do {
+                                    try batteryPackService.useBatteries(1, from: pack, context: context)
+                                } catch {
+                                    errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                                }
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.headline)
+                                    .frame(width: 34, height: 34)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .disabled(pack.quantityRemaining <= 0)
+                        }
+
+                        Button("Delete Pack", role: .destructive) {
+                            showsDeleteConfirm = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .navigationTitle("Pack Detail")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Edit") {
+                    showsEditSheet = true
+                }
+            }
+        }
+        .appBackground()
+        .sheet(isPresented: $showsEditSheet) {
+            EditBatteryPackSheet(
+                pack: pack,
+                existingPacks: existingPacks,
+                batteryPackService: batteryPackService,
+                errorMessage: $errorMessage,
+                onClose: {
+                    showsEditSheet = false
+                }
+            )
+        }
+        .alert("Delete Battery Pack?", isPresented: $showsDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                do {
+                    try batteryPackService.deletePack(pack, context: context)
+                    dismiss()
+                } catch {
+                    errorMessage = "Could not delete battery pack."
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This action cannot be undone.")
+        }
+        .errorAlert(title: "Unable to Complete Action", message: $errorMessage)
+    }
+}
+
+private struct EditBatteryPackSheet: View {
+    @Environment(\.modelContext) private var context
+
+    let pack: BatteryPack
+    let existingPacks: [BatteryPack]
+    let batteryPackService: BatteryPackService
+    @Binding var errorMessage: String?
+    let onClose: () -> Void
+
+    var body: some View {
+        AddBatteryPackSheet(
+            existingPacks: existingPacks,
+            previousPack: nil,
+            title: "Edit Battery Pack",
+            saveButtonTitle: "Save",
+            initialBatteryType: pack.batteryType,
+            initialBrand: pack.brand ?? "",
+            initialPurchaseDate: pack.purchaseDate,
+            initialBatteriesPerPack: max(1, pack.batteriesPerPack),
+            initialNumberOfPacks: max(1, pack.numberOfPacks),
+            initialPriceText: pack.priceAmount.map { NSDecimalNumber(decimal: $0).stringValue } ?? "",
+            initialCurrencyCode: pack.currencyCode ?? CurrencyFormatter.localeCurrencyCode,
+            onSave: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
+                do {
+                    try batteryPackService.updatePack(
+                        pack,
+                        batteryType: batteryType,
+                        purchaseDate: purchaseDate,
+                        batteriesPerPack: batteriesPerPack,
+                        numberOfPacks: numberOfPacks,
+                        priceAmount: priceAmount,
+                        currencyCode: currencyCode,
+                        brand: brand,
+                        retailer: pack.retailer,
+                        note: pack.note,
+                        context: context
+                    )
+                } catch {
+                    errorMessage = "Could not save battery pack changes."
+                }
+                onClose()
+            },
+            onCancel: {
+                onClose()
+            }
+        )
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .appBackground()
+    }
+}
+
+private func formattedCostPerDay(for stat: BatteryPackCostStat) -> String {
+    guard let costPerDay = stat.costPerDay else { return "Not enough data" }
+    return CurrencyFormatter.shared.format(costPerDay, currencyCode: stat.currencyCode)
+}
+
+struct UseBatteriesSheet: View {
+    @State private var countUsed: Int = 1
+    @State private var timestamp: Date = Date()
+    @State private var note: String = ""
+
+    let pack: BatteryPack
+    let onSave: (Int, String?, Date) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Pack") {
+                    Text(pack.batteryType)
+                        .font(.headline)
+                    Text("Remaining: \(pack.quantityRemaining)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Usage") {
+                    Stepper("Batteries used: \(countUsed)", value: $countUsed, in: 1...max(1, pack.quantityRemaining))
+                    DatePicker(
+                        "Timestamp",
+                        selection: $timestamp,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    TextField("Optional note", text: $note, axis: .vertical)
+                        .lineLimit(1...3)
+                }
+            }
+            .navigationTitle("Use Batteries")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
+                        onSave(countUsed, trimmedNote.isEmpty ? nil : trimmedNote, timestamp)
+                    }
+                    .disabled(pack.quantityRemaining <= 0)
+                }
+            }
+        }
     }
 }

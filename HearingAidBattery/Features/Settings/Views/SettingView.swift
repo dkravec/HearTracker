@@ -26,7 +26,7 @@ struct SettingView: View {
     @State private var importConflictAnalysis: BackupIssueLinkConflictAnalysis?
     @State private var issueLinkResolutions: [UUID: UUID?] = [:]
     @State private var exportDocument: BackupJSONDocument?
-    @State private var exportFilename: String = "HearTrackerr_Backup_v1"
+    @State private var exportFilename: String = "HearTracker_Backup_v1"
     @State private var resultMessage: String?
     @State private var notificationsEnabled: Bool = false
     @State private var morningTime: Date = Date()
@@ -371,7 +371,7 @@ struct SettingView: View {
         do {
             let data = try backupExportService.exportJSONData(context: context)
             exportDocument = BackupJSONDocument(data: data)
-            exportFilename = "HearTrackerr_Backup_v1_\(timestampForFilename())"
+            exportFilename = "HearTracker_Backup_v1_\(timestampForFilename())"
             showsFileExporter = true
         } catch {
             resultMessage = "Export failed."
@@ -606,7 +606,7 @@ private struct AboutView: View {
                             .font(.title3)
                             .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("HearTrackerr")
+                            Text("HearTracker")
                                 .font(.headline)
                             Text("Hearing Aid Battery")
                                 .font(.subheadline)

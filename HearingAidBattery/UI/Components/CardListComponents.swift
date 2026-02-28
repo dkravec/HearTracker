@@ -46,6 +46,37 @@ struct CardRowContainer<Content: View>: View {
     }
 }
 
+struct NavigableCardRow<Content: View, Destination: View>: View {
+    let destination: Destination
+    let content: Content
+
+    init(
+        @ViewBuilder destination: () -> Destination,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.destination = destination()
+        self.content = content()
+    }
+
+    var body: some View {
+        NavigationLink {
+            destination
+        } label: {
+            CardRowContainer {
+                HStack(alignment: .top, spacing: 10) {
+                    content
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 struct SectionHeaderView: View {
     let title: String
 
@@ -89,6 +120,26 @@ extension View {
         ZStack {
             AppBackgroundView()
             self
+        }
+    }
+
+    func errorAlert(
+        title: String = "Error",
+        message: Binding<String?>
+    ) -> some View {
+        alert(title, isPresented: Binding(
+            get: { message.wrappedValue != nil },
+            set: { isPresented in
+                if !isPresented {
+                    message.wrappedValue = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) {
+                message.wrappedValue = nil
+            }
+        } message: {
+            Text(message.wrappedValue ?? "Something went wrong.")
         }
     }
 }

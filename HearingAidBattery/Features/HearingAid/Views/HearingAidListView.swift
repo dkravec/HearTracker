@@ -17,8 +17,8 @@ struct HearingAidListView: View {
     @StateObject private var viewModel = HearingAidListViewModel()
     private let statsService = BatteryStatsService()
     private let batteryPackService = BatteryPackService()
+    private let issueLogService = IssueLogService()
     private let durationFormatter = BatteryDurationFormatter()
-    private let currencyFormatter = CurrencyFormatter.shared
     private static let statsWindowSize: Int = 10 // change to 0 for all
 
     @State private var showsAddActions: Bool = false
@@ -100,8 +100,18 @@ struct HearingAidListView: View {
                             )
                         }
 
-                        SectionHeaderView(title: "Battery Packs")
+                        NavigationLink {
+                            BatteryPackView(averageDuration: nil)
+                        } label: {
+                            HStack(spacing: 6) {
+                                SectionHeaderView(title: "Battery Packs")
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
                             .padding(.top, 8)
+                        }
+                        .buttonStyle(.plain)
 
                         if packs.isEmpty {
                             EmptyStateView(
@@ -111,41 +121,14 @@ struct HearingAidListView: View {
                             )
                         } else {
                             ForEach(packs) { pack in
-                                CardRowContainer {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack {
-                                            Text(pack.batteryType)
-                                                .font(.headline)
-                                            Spacer(minLength: 8)
-                                            Text("\(pack.quantityRemaining)/\(pack.quantityPurchased) left")
-                                                .font(.caption.weight(.semibold))
-                                                .foregroundStyle(.secondary)
-                                        }
-
-                                        if let brand = pack.brand, brand.isEmpty == false {
-                                            Text("Brand: \(brand)")
-                                                .font(.subheadline)
-                                        }
-
-                                        Text("Purchased \(pack.purchaseDate.formatted(date: .abbreviated, time: .omitted))")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-
-                                        Text("Batteries per pack: \(pack.batteriesPerPack)")
-                                            .font(.subheadline)
-                                        Text("Number of packs: \(pack.numberOfPacks)")
-                                            .font(.subheadline)
-
-                                        if let amount = pack.priceAmount, let code = pack.currencyCode {
-                                            Text("Price: \(currencyFormatter.format(amount, currencyCode: code))")
-                                                .font(.subheadline)
-                                            if let ppb = currencyFormatter.pricePerBattery(priceAmount: pack.priceAmount, quantityPurchased: pack.quantityPurchased, currencyCode: pack.currencyCode) {
-                                                Text("Price per battery: \(ppb)")
-                                                    .font(.subheadline)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                    }
+                                NavigableCardRow {
+                                    BatteryPackDetailView(
+                                        pack: pack,
+                                        existingPacks: packs,
+                                        averageDuration: nil
+                                    )
+                                } content: {
+                                    BatteryPackCardBody(pack: pack)
                                 }
                                 .contextMenu {
                                     Button("Delete Pack", role: .destructive) {
@@ -155,8 +138,18 @@ struct HearingAidListView: View {
                             }
                         }
 
-                        SectionHeaderView(title: "Issue History")
+                        NavigationLink {
+                            IssueLogView(hearingAids: activeAids)
+                        } label: {
+                            HStack(spacing: 6) {
+                                SectionHeaderView(title: "Issue History")
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
                             .padding(.top, 8)
+                        }
+                        .buttonStyle(.plain)
 
                         if activeIssues.isEmpty {
                             EmptyStateView(
@@ -166,7 +159,15 @@ struct HearingAidListView: View {
                             )
                         } else {
                             ForEach(activeIssues) { issue in
-                                IssueCardRow(issue: issue)
+                                NavigableCardRow {
+                                    IssueLogDetailView(
+                                        issue: issue,
+                                        hearingAids: activeAids,
+                                        issueLogService: issueLogService
+                                    )
+                                } content: {
+                                    IssueCardRow(issue: issue, wrapsInCard: false)
+                                }
                             }
                         }
 
@@ -195,7 +196,7 @@ struct HearingAidListView: View {
                 }
                 .background(Color.clear)
             }
-            .navigationTitle("Hearing Aids")
+            .navigationTitle("HearTracker")
             .navigationDestination(for: HearingAid.self) { aid in
                 HearingAidDetailView(aid: aid)
             }
@@ -275,7 +276,7 @@ struct HearingAidListView: View {
         .alert("Delete Battery Pack?", isPresented: deletePackAlertBinding) {
             Button("Delete", role: .destructive) {
                 if let packPendingDelete {
-                    try? batteryPackService.deleteBatteryPack(packPendingDelete, context: context)
+                    try? batteryPackService.deletePack(packPendingDelete, context: context)
                 }
                 packPendingDelete = nil
             }
