@@ -22,15 +22,27 @@ final class HearingAidListViewModel: ObservableObject {
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
     private let statsService: BatteryStatsService
+    private let notificationService: NotificationService
 
-    init(hearingAidService: HearingAidService, batteryLogService: BatteryLogProviding, statsService: BatteryStatsService) {
+    init(
+        hearingAidService: HearingAidService,
+        batteryLogService: BatteryLogProviding,
+        statsService: BatteryStatsService,
+        notificationService: NotificationService
+    ) {
         self.hearingAidService = hearingAidService
         self.batteryLogService = batteryLogService
         self.statsService = statsService
+        self.notificationService = notificationService
     }
 
     convenience init() {
-        self.init(hearingAidService: HearingAidService(), batteryLogService: BatteryLogService(), statsService: BatteryStatsService())
+        self.init(
+            hearingAidService: HearingAidService(),
+            batteryLogService: BatteryLogService(),
+            statsService: BatteryStatsService(),
+            notificationService: NotificationService()
+        )
     }
 
     func activeAids(from hearingAids: [HearingAid]) -> [HearingAid] {
@@ -67,6 +79,9 @@ final class HearingAidListViewModel: ObservableObject {
             context: context
         )) ?? true
         showsInventoryWarning = !consumedPack
+        Task {
+            await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+        }
         endLog()
     }
 

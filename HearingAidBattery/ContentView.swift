@@ -16,5 +16,13 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [HearingAid.self, BatteryLog.self, BatteryPack.self], inMemory: true)
+        .modelContainer(
+            for: [
+                HearingAid.self,
+                BatteryLog.self,
+                BatteryPack.self,
+                IssueLog.self,
+                NotificationModel.self],
+            inMemory: true
+        )
 }

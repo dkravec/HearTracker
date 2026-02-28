@@ -90,8 +90,7 @@ struct HearingAidDetailView: View {
                     .contextMenu {
                         if log.excludeFromStats == false {
                             Button("Exclude from averages") {
-                                log.excludeFromStats = true
-                                try? context.save()
+                                viewModel.excludeFromAverages(log, hearingAidId: aid.id, context: context)
                             }
                         }
                     }

@@ -37,6 +37,12 @@ struct SettingService {
             deletedCount += 1
         }
 
+        let notificationSettings = try context.fetch(FetchDescriptor<NotificationModel>())
+        for item in notificationSettings {
+            context.delete(item)
+            deletedCount += 1
+        }
+
         try context.save()
         return deletedCount
     }

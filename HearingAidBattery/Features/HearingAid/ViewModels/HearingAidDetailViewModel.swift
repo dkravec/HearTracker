@@ -25,14 +25,24 @@ final class HearingAidDetailViewModel: ObservableObject {
 
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
+    private let notificationService: NotificationService
 
-    init(hearingAidService: HearingAidService, batteryLogService: BatteryLogProviding) {
+    init(
+        hearingAidService: HearingAidService,
+        batteryLogService: BatteryLogProviding,
+        notificationService: NotificationService
+    ) {
         self.hearingAidService = hearingAidService
         self.batteryLogService = batteryLogService
+        self.notificationService = notificationService
     }
 
     convenience init() {
-        self.init(hearingAidService: HearingAidService(), batteryLogService: BatteryLogService())
+        self.init(
+            hearingAidService: HearingAidService(),
+            batteryLogService: BatteryLogService(),
+            notificationService: NotificationService()
+        )
     }
 
     func syncFromAid(_ hearingAid: HearingAid) {
@@ -86,6 +96,7 @@ final class HearingAidDetailViewModel: ObservableObject {
         excludePreviousGapFromStats: Bool,
         context: ModelContext
     ) {
+        let hearingAidId = log.hearingAid?.id
         try? batteryLogService.updateLog(
             log,
             timestamp: timestamp,
@@ -94,14 +105,31 @@ final class HearingAidDetailViewModel: ObservableObject {
             excludePreviousGapFromStats: excludePreviousGapFromStats,
             context: context
         )
+        if let hearingAidId {
+            Task {
+                await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+            }
+        }
     }
 
     func deleteLog(_ log: BatteryLog, context: ModelContext) {
+        let hearingAidId = log.hearingAid?.id
         try? batteryLogService.deleteLog(log, context: context)
+        if let hearingAidId {
+            Task {
+                await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+            }
+        }
     }
 
     func deleteLogs(at offsets: IndexSet, logs: [BatteryLog], context: ModelContext) {
+        let hearingAidId = offsets.compactMap { logs[$0].hearingAid?.id }.first
         try? batteryLogService.deleteLogs(at: offsets, from: logs, context: context)
+        if let hearingAidId {
+            Task {
+                await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+            }
+        }
     }
 
     func beginLog() {
@@ -127,10 +155,22 @@ final class HearingAidDetailViewModel: ObservableObject {
             context: context
         )) ?? true
         showsInventoryWarning = !consumedPack
+        Task {
+            await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+        }
         endLog()
     }
 
     func dismissInventoryWarning() {
         showsInventoryWarning = false
+    }
+
+    func excludeFromAverages(_ log: BatteryLog, hearingAidId: UUID, context: ModelContext) {
+        guard log.excludeFromStats == false else { return }
+        log.excludeFromStats = true
+        try? context.save()
+        Task {
+            await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+        }
     }
 }
