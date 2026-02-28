@@ -52,7 +52,7 @@ struct HearingAidBatteryApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView().appBackground()
         }
         .modelContainer(sharedModelContainer)
     }

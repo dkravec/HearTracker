@@ -1,0 +1,96 @@
+//
+//  HearingAidDetailViewModel.swift
+//  HearingAidBattery
+//
+//  Created by Daniel Kravec on 2026-02-27.
+//
+
+import Combine
+import Foundation
+import SwiftData
+
+@MainActor
+final class HearingAidDetailViewModel: ObservableObject {
+    @Published var isEditing: Bool = false
+    @Published var editName: String = ""
+    @Published var editModel: String = ""
+    @Published var editRetired: Bool = false
+    @Published var showsDeleteAlert: Bool = false
+    @Published var showsLogSheet: Bool = false
+    @Published var logNote: String = ""
+
+    private let hearingAidService: HearingAidService
+    private let batteryLogService: BatteryLogProviding
+
+    init(hearingAidService: HearingAidService, batteryLogService: BatteryLogProviding) {
+        self.hearingAidService = hearingAidService
+        self.batteryLogService = batteryLogService
+    }
+
+    convenience init() {
+        self.init(hearingAidService: HearingAidService(), batteryLogService: BatteryLogService())
+    }
+
+    func syncFromAid(_ hearingAid: HearingAid) {
+        guard !isEditing else { return }
+        editName = hearingAid.name
+        editModel = hearingAid.model ?? ""
+        editRetired = hearingAid.retired
+    }
+
+    func beginEditing(with hearingAid: HearingAid) {
+        editName = hearingAid.name
+        editModel = hearingAid.model ?? ""
+        editRetired = hearingAid.retired
+        isEditing = true
+    }
+
+    func endEditing(resetWith hearingAid: HearingAid, reset: Bool) {
+        if reset {
+            editName = hearingAid.name
+            editModel = hearingAid.model ?? ""
+            editRetired = hearingAid.retired
+        }
+
+        isEditing = false
+    }
+
+    func saveEdits(for hearingAid: HearingAid, context: ModelContext) {
+        try? hearingAidService.updateHearingAid(
+            hearingAid,
+            name: editName,
+            model: editModel,
+            retired: editRetired,
+            context: context
+        )
+        endEditing(resetWith: hearingAid, reset: true)
+    }
+
+    func deleteHearingAid(_ hearingAid: HearingAid, context: ModelContext) {
+        try? hearingAidService.deleteHearingAid(hearingAid, context: context)
+    }
+
+    func deleteLogs(at offsets: IndexSet, logs: [BatteryLog], context: ModelContext) {
+        try? batteryLogService.deleteLogs(at: offsets, from: logs, context: context)
+    }
+
+    func beginLog() {
+        logNote = ""
+        showsLogSheet = true
+    }
+
+    func endLog() {
+        logNote = ""
+        showsLogSheet = false
+    }
+
+    func saveLog(for hearingAid: HearingAid, note: String?, context: ModelContext) {
+        try? batteryLogService.quickLog(for: hearingAid, note: note, context: context)
+        endLog()
+    }
+
+    func saveLogWithoutNote(for hearingAid: HearingAid, context: ModelContext) {
+        try? batteryLogService.quickLog(for: hearingAid, note: nil, context: context)
+        endLog()
+    }
+}

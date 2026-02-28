@@ -5,31 +5,36 @@
 //  Created by Daniel Kravec on 2026-02-21.
 //
 
-import SwiftData
 import Foundation
+import SwiftData
 
 @MainActor
-final class BatteryLogService {
-    func quickLog(for aid: HearingAid, note: String? = nil, context: ModelContext) throws {
-        // Find current log (if any)
-        let logs = aid.logs
-        let current = logs
-            .sorted { $0.timestamp > $1.timestamp }
-            .first
+protocol BatteryLogProviding {
+    func quickLog(for hearingAid: HearingAid, note: String?, context: ModelContext) throws
+    func deleteLogs(at offsets: IndexSet, from logs: [BatteryLog], context: ModelContext) throws
+}
 
-        // Create new log (becomes current)
-        let newLog = BatteryLog(hearingAid: aid, timestamp: Date(), note: note)
+@MainActor
+final class BatteryLogService: BatteryLogProviding {
+    func quickLog(for hearingAid: HearingAid, note: String? = nil, context: ModelContext) throws {
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedNote = (trimmedNote?.isEmpty == true) ? nil : trimmedNote
+
+        let newLog = BatteryLog(
+            hearingAid: hearingAid,
+            timestamp: Date(),
+            note: normalizedNote
+        )
+
         context.insert(newLog)
+        try context.save()
+    }
+
+    func deleteLogs(at offsets: IndexSet, from logs: [BatteryLog], context: ModelContext) throws {
+        for index in offsets {
+            context.delete(logs[index])
+        }
 
         try context.save()
     }
-}
-
-func durationString(for log: BatteryLog, in logs: [BatteryLog]) -> String? {
-//    guard let nextId = log.nextLogId,
-//          let next = logs.first(where: { $0.id == nextId }) else { return nil }
-
-//    let seconds = next.timestamp.timeIntervalSince(log.timestamp)
-//    let days = seconds / 86400.0
-    return String(format: "%.1f days", 0)
 }

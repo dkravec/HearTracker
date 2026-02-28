@@ -30,6 +30,16 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		6526BC182F525C90009E6729 /* Docs */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Docs;
+			sourceTree = "<group>";
+		};
+		6526BD4A2F5265F6009E6729 /* Tests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Tests;
+			sourceTree = "<group>";
+		};
 		65ACE1FF2F4A6721008E2B5A /* HearingAidBattery */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -54,6 +64,8 @@
 		65ACE1F42F4A6721008E2B5A = {
 			isa = PBXGroup;
 			children = (
+				6526BD4A2F5265F6009E6729 /* Tests */,
+				6526BC182F525C90009E6729 /* Docs */,
 				65ACE22A2F4A6EA9008E2B5A /* App.icon */,
 				65ACE2262F4A696E008E2B5A /* Readme.md */,
 				65ACE1FF2F4A6721008E2B5A /* HearingAidBattery */,
@@ -86,6 +98,8 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
+				6526BC182F525C90009E6729 /* Docs */,
+				6526BD4A2F5265F6009E6729 /* Tests */,
 				65ACE1FF2F4A6721008E2B5A /* HearingAidBattery */,
 			);
 			name = HearingAidBattery;
@@ -168,6 +182,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HearingAidBattery/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = HearTracker;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -214,6 +229,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = HearingAidBattery/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = HearTracker;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;

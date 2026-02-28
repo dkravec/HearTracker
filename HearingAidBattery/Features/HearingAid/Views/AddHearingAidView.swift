@@ -15,21 +15,26 @@ struct AddHearingAidView: View {
     @State private var name: String = ""
     @State private var model: String = ""
 
+    private let hearingAidService = HearingAidService()
+
+    private var trimmedName: String {
+        name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         Form {
             TextField("Name", text: $name)
             TextField("Model", text: $model)
+
             Button("Create") {
-                let trimmedModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
-                let aid = HearingAid(
-                    name: name.trimmingCharacters(in: .whitespacesAndNewlines),
-                    model: trimmedModel.isEmpty ? nil : trimmedModel
+                try? hearingAidService.createHearingAid(
+                    name: name,
+                    model: model,
+                    context: context
                 )
-                context.insert(aid)
-                try? context.save()
                 dismiss()
             }
-            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(trimmedName.isEmpty)
         }
         .navigationTitle("Add Hearing Aid")
     }

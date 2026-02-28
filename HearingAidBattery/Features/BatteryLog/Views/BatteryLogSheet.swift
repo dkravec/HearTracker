@@ -1,5 +1,5 @@
 //
-//  LogBatterySheet.swift
+//  BatteryLogSheet.swift
 //  HearingAidBattery
 //
 //  Created by Daniel Kravec on 2026-02-21.
@@ -7,7 +7,7 @@
 
 import SwiftUI
 
-struct LogBatterySheet: View {
+struct BatteryLogSheet: View {
     @Binding var note: String
     let onSave: (String?) -> Void
     let onSaveWithoutNote: () -> Void
@@ -24,6 +24,12 @@ struct LogBatterySheet: View {
                 } footer: {
                     Text("Leave blank to log without a note.")
                 }
+
+                Section {
+                    Button("Save Without Note") {
+                        onSaveWithoutNote()
+                    }
+                }
             }
             .navigationTitle("New Battery Log")
             .toolbar {
@@ -36,11 +42,6 @@ struct LogBatterySheet: View {
                         onSave(trimmed.isEmpty ? nil : trimmed)
                     }
                     .buttonStyle(.borderedProminent)
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    Button("Save Without Note") {
-                        onSaveWithoutNote()
-                    }
                 }
             }
         }

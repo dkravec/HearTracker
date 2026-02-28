@@ -12,12 +12,12 @@ import SwiftData
 final class HearingAid {
     var id: UUID = UUID()
     var createdAt: Date = Date()
-    var name: String
+    var name: String = ""
     var model: String?
-    var retired: Bool
+    var retired: Bool = false
 
     @Relationship(deleteRule: .cascade, inverse: \BatteryLog.hearingAid)
-    var logs: [BatteryLog] = []
+    var logs: [BatteryLog]?
 
     init(name: String, model: String? = nil, retired: Bool = false) {
         self.name = name

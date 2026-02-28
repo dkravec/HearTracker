@@ -10,114 +10,133 @@ import SwiftData
 
 struct HearingAidListView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \HearingAid.createdAt, order: .reverse) private var aids: [HearingAid]
+    @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
 
-    @State private var showsRetired: Bool = false
-    @State private var logTargetAid: HearingAid?
-    @State private var logNote: String = ""
-
-    private let service = BatteryLogService()
+    @StateObject private var viewModel = HearingAidListViewModel()
+    @State private var selectedAid: HearingAid?
 
     private var activeAids: [HearingAid] {
-        aids.filter { !$0.retired }
+        viewModel.activeAids(from: hearingAids)
     }
 
     private var retiredAids: [HearingAid] {
-        aids.filter { $0.retired }
+        viewModel.retiredAids(from: hearingAids)
     }
 
     var body: some View {
         NavigationStack {
-            List {
-                if activeAids.isEmpty {
-                    ContentUnavailableView(
-                        "No Hearing Aids",
-                        systemImage: "ear",
-                        description: Text("Add a hearing aid to start tracking battery changes.")
-                    )
-                }
+            ZStack {
+                AppBackgroundView()
 
-                ForEach(activeAids) { aid in
-                    hearingAidRow(for: aid)
-                }
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        if activeAids.isEmpty {
+                            EmptyStateView(
+                                title: "No Hearing Aids",
+                                systemImage: "ear",
+                                message: "Add a hearing aid to start tracking battery changes."
+                            )
+                        }
 
-                if showsRetired, !retiredAids.isEmpty {
-                    Section("Retired") {
-                        ForEach(retiredAids) { aid in
-                            hearingAidRow(for: aid)
+                        ForEach(activeAids) { aid in
+                            HearingAidCardRow(
+                                aid: aid,
+                                onOpen: { selectedAid = aid },
+                                onLogTapped: { viewModel.beginLog(for: aid) }
+                            )
+                        }
+
+                        if viewModel.showsRetired, !retiredAids.isEmpty {
+                            SectionHeaderView(title: "Retired")
+                                .padding(.top, 8)
+
+                            ForEach(retiredAids) { aid in
+                                HearingAidCardRow(
+                                    aid: aid,
+                                    onOpen: { selectedAid = aid },
+                                    onLogTapped: { viewModel.beginLog(for: aid) }
+                                )
+                            }
                         }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
+                .background(Color.clear)
             }
             .navigationTitle("Hearing Aids")
+            .navigationDestination(item: $selectedAid) { aid in
+                HearingAidDetailView(aid: aid)
+            }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink("Add") { AddHearingAidView() }
+                    NavigationLink("Add") { AddHearingAidView().appBackground() }
                 }
+
                 ToolbarItem(placement: .navigationBarLeading) {
                     if !retiredAids.isEmpty {
-                        Button(showsRetired ? "Hide Retired" : "Show Retired") {
-                            showsRetired.toggle()
+                        Button(viewModel.showsRetired ? "Hide Retired" : "Show Retired") {
+                            viewModel.showsRetired.toggle()
                         }
                     }
                 }
             }
         }
-        .sheet(item: $logTargetAid) { aid in
-            LogBatterySheet(
-                note: $logNote,
+        .sheet(item: $viewModel.logTargetAid) { aid in
+            BatteryLogSheet(
+                note: $viewModel.logNote,
                 onSave: { note in
-                    try? service.quickLog(for: aid, note: note, context: context)
-                    endLog()
+                    viewModel.saveLog(for: aid, note: note, context: context)
                 },
                 onSaveWithoutNote: {
-                    try? service.quickLog(for: aid, context: context)
-                    endLog()
+                    viewModel.saveLogWithoutNote(for: aid, context: context)
                 },
                 onCancel: {
-                    endLog()
+                    viewModel.endLog()
                 }
             )
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
+            .appBackground()
         }
     }
+}
 
-    @ViewBuilder
-    private func hearingAidRow(for aid: HearingAid) -> some View {
-        NavigationLink {
-            HearingAidDetailView(aid: aid)
-        } label: {
+private struct HearingAidCardRow: View {
+    let aid: HearingAid
+    let onOpen: () -> Void
+    let onLogTapped: () -> Void
+
+    var body: some View {
+        CardRowContainer {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(aid.name)
                         .font(.headline)
+
                     if let model = aid.model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
                         Text(model)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
-                    Text("\(aid.logs.count) changes")
+
+                    Text("\((aid.logs ?? []).count) changes")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer()
+
+                Spacer(minLength: 8)
+
                 Button("Log") {
-                    beginLog(for: aid)
+                    onLogTapped()
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Log battery change for \(aid.name)")
             }
-            .padding(.vertical, 4)
         }
-    }
-
-    private func beginLog(for aid: HearingAid) {
-        logNote = ""
-        logTargetAid = aid
-    }
-
-    private func endLog() {
-        logNote = ""
-        logTargetAid = nil
+        .onTapGesture {
+            onOpen()
+        }
+        .contentShape(Rectangle())
     }
 }
