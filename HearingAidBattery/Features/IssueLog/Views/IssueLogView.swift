@@ -44,7 +44,7 @@ struct IssueLogListView: View {
                 if issues.isEmpty {
                     EmptyStateView(
                         title: "No Issues Logged",
-                        systemImage: "exclamationmark.bubble",
+                        systemImage: FeatureSymbols.issue,
                         message: "Issue tracking entries will appear here."
                     )
                 } else {

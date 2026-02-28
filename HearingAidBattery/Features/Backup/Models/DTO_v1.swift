@@ -1,0 +1,60 @@
+import Foundation
+
+struct HearingAidDTO_v1: Codable {
+    let id: UUID
+    let createdAt: Date
+    let name: String
+    let model: String?
+    let batteryType: String?
+    let retired: Bool
+}
+
+struct BatteryLogDTO_v1: Codable {
+    let id: UUID
+    let hearingAidId: UUID?
+    let batteryPackId: UUID?
+    let timestamp: Date
+    let note: String?
+    let excludeFromStats: Bool
+    let excludePreviousGapFromStats: Bool
+    let batteryType: String?
+}
+
+struct BatteryPackDTO_v1: Codable {
+    let id: UUID
+    let createdAt: Date
+    let batteryType: String
+    let purchaseDate: Date
+    let batteriesPerPack: Int
+    let numberOfPacks: Int
+    let quantityPurchased: Int
+    let quantityRemaining: Int
+    let priceAmount: Decimal?
+    let currencyCode: String?
+    let brand: String?
+    let retailer: String?
+    let note: String?
+}
+
+struct IssueLogDTO_v1: Codable {
+    let id: UUID
+    let hearingAidId: UUID?
+    let timestamp: Date
+    let issue: String
+    let severity: Int?
+    let note: String?
+    let linkedBatteryLogId: UUID?
+}
+
+struct SettingsDTO_v1: Codable {
+    let key: String
+    let value: String
+}
+
+struct NotificationDTO_v1: Codable {
+    let id: UUID
+    let createdAt: Date
+    let isEnabled: Bool
+    let morningHour: Int
+    let morningMinute: Int
+}

@@ -76,7 +76,7 @@ struct HearingAidDetailView: View {
                 if logs.isEmpty {
                     EmptyStateView(
                         title: "No Battery Logs",
-                        systemImage: "battery.0",
+                        systemImage: FeatureSymbols.batteryLog,
                         message: "Tap the plus button to add the first battery log."
                     )
                 }

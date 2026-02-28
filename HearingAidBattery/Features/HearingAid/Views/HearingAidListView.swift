@@ -86,7 +86,7 @@ struct HearingAidListView: View {
                         if activeAids.isEmpty {
                             EmptyStateView(
                                 title: "No Hearing Aids",
-                                systemImage: "ear",
+                                systemImage: FeatureSymbols.hearingAid,
                                 message: "Add a hearing aid to start tracking battery changes."
                             )
                         } else {
@@ -104,19 +104,11 @@ struct HearingAidListView: View {
                             .padding(.top, 8)
 
                         if packs.isEmpty {
-                            CardRowContainer {
-                                VStack(alignment: .leading, spacing: 10) {
-                                    Text("No Battery Packs")
-                                        .font(.headline)
-                                    Text("Add a battery pack to track inventory and cost.")
-                                        .font(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                    Button("Add Pack") {
-                                        showsAddActions = true
-                                    }
-                                    .buttonStyle(.borderedProminent)
-                                }
-                            }
+                            EmptyStateView(
+                                title: "No Battery Packs",
+                                systemImage: FeatureSymbols.batteryPack,
+                                message: "Add a battery pack to track inventory and cost."
+                            )
                         } else {
                             ForEach(packs) { pack in
                                 CardRowContainer {
@@ -169,7 +161,7 @@ struct HearingAidListView: View {
                         if activeIssues.isEmpty {
                             EmptyStateView(
                                 title: "No Issues Logged",
-                                systemImage: "exclamationmark.bubble",
+                                systemImage: FeatureSymbols.issue,
                                 message: "Log an issue from Add Item."
                             )
                         } else {

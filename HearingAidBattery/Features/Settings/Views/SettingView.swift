@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct SettingView: View {
     @Environment(\.modelContext) private var context
@@ -16,7 +17,16 @@ struct SettingView: View {
     @State private var showsDeleteAllDataAlert: Bool = false
     @State private var showsDeleteLogsSheet: Bool = false
     @State private var showsDeleteLogsAlert: Bool = false
+    @State private var showsImportBackupAlert: Bool = false
+    @State private var showsImportConflictResolver: Bool = false
+    @State private var showsFileImporter: Bool = false
+    @State private var showsFileExporter: Bool = false
     @State private var pendingDeleteLogsAidId: UUID?
+    @State private var pendingImportData: Data?
+    @State private var importConflictAnalysis: BackupIssueLinkConflictAnalysis?
+    @State private var issueLinkResolutions: [UUID: UUID?] = [:]
+    @State private var exportDocument: BackupJSONDocument?
+    @State private var exportFilename: String = "HearTrackerr_Backup_v1"
     @State private var resultMessage: String?
     @State private var notificationsEnabled: Bool = false
     @State private var morningTime: Date = Date()
@@ -24,6 +34,8 @@ struct SettingView: View {
 
     private let settingService = SettingService()
     private let notificationService = NotificationService()
+    private let backupExportService = BackupExportService()
+    private let backupImportService = BackupImportService()
 
     var body: some View {
         ScrollView {
@@ -44,16 +56,35 @@ struct SettingView: View {
 
                 SectionHeaderView(title: "Data")
                 CardRowContainer {
-                    NavigationLink {
-                        NotesImportView()
-                    } label: {
-                        settingsRowLabel(
+                    VStack(alignment: .leading, spacing: 12) {
+                        settingsNavigationRow(
                             title: "Notes Import",
                             subtitle: "Paste and preview note history",
                             systemImage: "square.and.arrow.down.fill"
-                        )
+                        ) {
+                            NotesImportView()
+                        }
+
+                        Divider()
+
+                        settingsActionRow(
+                            title: "Export Backup",
+                            subtitle: "Save all data to JSON",
+                            systemImage: "square.and.arrow.up.fill"
+                        ) {
+                            exportBackup()
+                        }
+
+                        Divider()
+
+                        settingsActionRow(
+                            title: "Import Backup",
+                            subtitle: "Replace all data from JSON",
+                            systemImage: "square.and.arrow.down.on.square.fill"
+                        ) {
+                            showsFileImporter = true
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
 
                 SectionHeaderView(title: "Notifications")
@@ -115,11 +146,9 @@ struct SettingView: View {
         .alert("Delete All Data?", isPresented: $showsDeleteAllDataAlert) {
             Button("Delete", role: .destructive) {
                 do {
-                    let count = try settingService.deleteAllData(context: context)
-                    resultMessage = "Deleted \(count) records."
-                    Task {
-                        await notificationService.rescheduleAll(context: context)
-                    }
+                    let summary = try settingService.deleteAllData(context: context)
+                    resultMessage = deleteAllSummaryText(summary)
+                    rescheduleNotifications()
                 } catch {
                     resultMessage = "Delete failed."
                 }
@@ -127,6 +156,16 @@ struct SettingView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will remove hearing aids, battery logs, packs, and issues.")
+        }
+        .alert("Import Backup?", isPresented: $showsImportBackupAlert) {
+            Button("Import", role: .destructive) {
+                performBackupImport()
+            }
+            Button("Cancel", role: .cancel) {
+                pendingImportData = nil
+            }
+        } message: {
+            Text("This will replace all existing data.")
         }
         .sheet(isPresented: $showsDeleteLogsSheet) {
             NavigationStack {
@@ -168,9 +207,7 @@ struct SettingView: View {
                 do {
                     let count = try settingService.deleteBatteryLogs(for: pendingDeleteLogsAidId, context: context)
                     resultMessage = "Deleted \(count) battery logs."
-                    Task {
-                        await notificationService.rescheduleAll(context: context)
-                    }
+                    rescheduleNotifications()
                 } catch {
                     resultMessage = "Delete failed."
                 }
@@ -182,7 +219,7 @@ struct SettingView: View {
         } message: {
             Text(deleteLogsAlertMessage)
         }
-        .alert("Done", isPresented: Binding(
+        .alert(resultAlertTitle, isPresented: Binding(
             get: { resultMessage != nil },
             set: { newValue in
                 if !newValue { resultMessage = nil }
@@ -191,6 +228,61 @@ struct SettingView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(resultMessage ?? "")
+        }
+        .fileExporter(
+            isPresented: $showsFileExporter,
+            document: exportDocument,
+            contentType: .json,
+            defaultFilename: exportFilename
+        ) { result in
+            switch result {
+            case .success:
+                resultMessage = "Backup exported."
+            case .failure:
+                resultMessage = "Export failed."
+            }
+            exportDocument = nil
+        }
+        .fileImporter(
+            isPresented: $showsFileImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                let access = url.startAccessingSecurityScopedResource()
+                defer {
+                    if access { url.stopAccessingSecurityScopedResource() }
+                }
+                guard let data = try? Data(contentsOf: url) else {
+                    resultMessage = "Import failed."
+                    return
+                }
+                pendingImportData = data
+                showsImportBackupAlert = true
+            case .failure:
+                resultMessage = "Import failed."
+            }
+        }
+        .sheet(isPresented: $showsImportConflictResolver) {
+            if let analysis = importConflictAnalysis {
+                NavigationStack {
+                    BackupImportConflictResolverView(
+                        analysis: analysis,
+                        resolutions: $issueLinkResolutions,
+                        onCancel: {
+                            clearImportConflictState()
+                            pendingImportData = nil
+                        },
+                        onImport: {
+                            performResolvedBackupImport()
+                        }
+                    )
+                }
+            } else {
+                EmptyView()
+            }
         }
     }
 
@@ -260,9 +352,7 @@ struct SettingView: View {
             morningMinute: components.minute ?? 0,
             context: context
         )
-        Task {
-            await notificationService.rescheduleAll(context: context)
-        }
+        rescheduleNotifications()
     }
 
     private var deleteLogsAlertMessage: String {
@@ -270,6 +360,239 @@ struct SettingView: View {
             return "This only deletes battery logs for \(aid.name)."
         }
         return "This only deletes battery logs for all hearing aids."
+    }
+
+    private var resultAlertTitle: String {
+        guard let resultMessage else { return "Result" }
+        return resultMessage.lowercased().contains("failed") ? "Failed" : "Done"
+    }
+
+    private func exportBackup() {
+        do {
+            let data = try backupExportService.exportJSONData(context: context)
+            exportDocument = BackupJSONDocument(data: data)
+            exportFilename = "HearTrackerr_Backup_v1_\(timestampForFilename())"
+            showsFileExporter = true
+        } catch {
+            resultMessage = "Export failed."
+        }
+    }
+
+    private func performBackupImport() {
+        guard let importData = pendingImportData else { return }
+        do {
+            let analysis = try backupImportService.analyzeIssueLinkConflicts(in: importData)
+            if analysis.conflicts.isEmpty == false {
+                importConflictAnalysis = analysis
+                issueLinkResolutions = Dictionary(uniqueKeysWithValues: analysis.conflicts.map { ($0.issueLogId, nil) })
+                showsImportConflictResolver = true
+                return
+            }
+
+            importBackupData(importData)
+            clearImportConflictState()
+        } catch let error as BackupImportService.BackupImportError {
+            setImportFailureMessage(error)
+            clearImportConflictState()
+        } catch {
+            resultMessage = "Import failed."
+            clearImportConflictState()
+        }
+        pendingImportData = nil
+    }
+
+    private func performResolvedBackupImport() {
+        guard let importData = pendingImportData else { return }
+        importBackupData(importData, issueLogLinkedBatteryLogOverrides: issueLinkResolutions)
+        clearImportConflictState()
+        pendingImportData = nil
+    }
+
+    private func timestampForFilename() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd_HHmm"
+        return formatter.string(from: Date())
+    }
+
+    private func deleteAllSummaryText(_ summary: DeleteAllDataSummary) -> String {
+        """
+        Deleted \(summary.total) records:
+        \(summary.hearingAids) hearing aids
+        \(summary.batteryLogs) battery logs
+        \(summary.batteryPacks) battery packs
+        \(summary.issueLogs) issue logs
+        \(summary.notifications) notification settings
+        """
+    }
+
+    private func importSummaryText(_ summary: BackupImportSummary) -> String {
+        """
+        Backup imported:
+        \(summary.hearingAids) hearing aids
+        \(summary.batteryLogs) battery logs
+        \(summary.batteryPacks) battery packs
+        \(summary.issueLogs) issue logs
+        \(summary.notifications) notification settings
+        """
+    }
+
+    private func clearImportConflictState() {
+        showsImportConflictResolver = false
+        importConflictAnalysis = nil
+        issueLinkResolutions = [:]
+    }
+
+    private func importBackupData(
+        _ data: Data,
+        issueLogLinkedBatteryLogOverrides: [UUID: UUID?] = [:]
+    ) {
+        do {
+            let summary = try backupImportService.importJSONData(
+                data,
+                context: context,
+                issueLogLinkedBatteryLogOverrides: issueLogLinkedBatteryLogOverrides
+            )
+            resultMessage = importSummaryText(summary)
+            rescheduleNotifications()
+        } catch let error as BackupImportService.BackupImportError {
+            setImportFailureMessage(error)
+        } catch {
+            resultMessage = "Import failed."
+        }
+    }
+
+    private func setImportFailureMessage(_ error: BackupImportService.BackupImportError) {
+        resultMessage = "Import failed.\n\(importErrorText(error))"
+    }
+
+    private func importErrorText(_ error: BackupImportService.BackupImportError) -> String {
+        switch error {
+        case .unsupportedBackupFormatVersion(let version):
+            return "Unsupported backup format version: \(version)."
+        case .unsupportedModelVersion(let model, let version):
+            return "Unsupported \(model) model version: \(version)."
+        case .decodingFailed:
+            return "The file could not be decoded."
+        case .duplicateModelID(let model, let id):
+            return "Duplicate ID in \(model): \(id.uuidString)."
+        case .missingRequiredReference(let model, let field, let id):
+            return "Missing \(field) for \(model) record \(id.uuidString)."
+        case .unresolvedReference(let model, let field, let id):
+            return "Unresolved \(field) for \(model) record \(id.uuidString)."
+        }
+    }
+
+    private func rescheduleNotifications() {
+        Task {
+            await notificationService.rescheduleAll(context: context)
+        }
+    }
+
+    private func settingsActionRow(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            settingsRowLabel(title: title, subtitle: subtitle, systemImage: systemImage)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func settingsNavigationRow<Destination: View>(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            settingsRowLabel(title: title, subtitle: subtitle, systemImage: systemImage)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct BackupImportConflictResolverView: View {
+    let analysis: BackupIssueLinkConflictAnalysis
+    @Binding var resolutions: [UUID: UUID?]
+    let onCancel: () -> Void
+    let onImport: () -> Void
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    var body: some View {
+        List {
+            Section {
+                Text("Some issue logs link to battery logs that are not present in this backup. Choose a replacement log for each issue, or select Unlink.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Unresolved Links") {
+                ForEach(analysis.conflicts) { conflict in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(conflict.issueText)
+                            .font(.headline)
+                        Text(conflictSubtitle(conflict))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Picker("Linked Battery Log", selection: selectionBinding(for: conflict.issueLogId)) {
+                            Text("Unlink").tag(Optional<UUID>.none)
+                            ForEach(analysis.candidates) { candidate in
+                                Text(candidateLabel(candidate)).tag(Optional(candidate.id))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+        }
+        .navigationTitle("Resolve Import Links")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") {
+                    onCancel()
+                }
+            }
+            ToolbarItem(placement: .confirmationAction) {
+                Button("Import") {
+                    onImport()
+                }
+            }
+        }
+    }
+
+    private func selectionBinding(for issueLogId: UUID) -> Binding<UUID?> {
+        Binding<UUID?>(
+            get: { resolutions[issueLogId] ?? nil },
+            set: { resolutions[issueLogId] = $0 }
+        )
+    }
+
+    private func conflictSubtitle(_ conflict: BackupIssueLinkConflict) -> String {
+        let timestamp = Self.dateFormatter.string(from: conflict.issueTimestamp)
+        if let hearingAidName = conflict.hearingAidName {
+            return "\(hearingAidName) • \(timestamp)\nMissing link: \(conflict.missingLinkedBatteryLogId.uuidString)"
+        }
+        return "\(timestamp)\nMissing link: \(conflict.missingLinkedBatteryLogId.uuidString)"
+    }
+
+    private func candidateLabel(_ candidate: BackupIssueLinkCandidate) -> String {
+        let timestamp = Self.dateFormatter.string(from: candidate.timestamp)
+        if let hearingAidName = candidate.hearingAidName {
+            return "\(hearingAidName) • \(timestamp)"
+        }
+        return timestamp
     }
 }
 
