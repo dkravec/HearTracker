@@ -16,7 +16,9 @@ struct HearingAidDetailView: View {
     @Query private var logs: [BatteryLog]
 
     @StateObject private var viewModel = HearingAidDetailViewModel()
+    @StateObject private var batteryStatusViewModel = BatteryStatusViewModel()
     private static let durationFormatter = BatteryDurationFormatter()
+    private static let statsWindowSize: Int = 10
 
     init(aid: HearingAid) {
         self.aid = aid
@@ -38,6 +40,8 @@ struct HearingAidDetailView: View {
                 if viewModel.isEditing {
                     editSection
                 }
+
+                statsSection
 
                 SectionHeaderView(title: "Battery Logs")
                     .padding(.top, viewModel.isEditing ? 4 : 0)
@@ -126,7 +130,36 @@ struct HearingAidDetailView: View {
             .appBackground()
         }
         .onAppear { viewModel.syncFromAid(aid) }
+        .task(id: logsRefreshSignature) {
+            _ = batteryStatusViewModel.refresh(
+                hearingAidId: aid.id,
+                windowSize: Self.statsWindowSize,
+                context: context
+            )
+        }
         .appBackground()
+    }
+
+    private var statsSection: some View {
+        CardRowContainer {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Battery Stats")
+                    .font(.headline)
+
+                statsRow(
+                    title: "Current battery age",
+                    value: batteryStatusViewModel.currentBatteryAgeText ?? "Not enough data"
+                )
+                statsRow(
+                    title: "Average duration (last \(Self.statsWindowSize))",
+                    value: batteryStatusViewModel.averageDurationText ?? "Not enough data"
+                )
+                statsRow(
+                    title: "Predicted death",
+                    value: batteryStatusViewModel.predictedDeathText ?? "Not enough data"
+                )
+            }
+        }
     }
 
     private var editSection: some View {
@@ -192,6 +225,25 @@ struct HearingAidDetailView: View {
             rawDuration: duration,
             durationText: Self.durationFormatter.optionalDaysText(from: duration)
         )
+    }
+
+    private func statsRow(title: String, value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.subheadline)
+        }
+    }
+
+    private var logsRefreshSignature: String {
+        logs
+            .map {
+                "\($0.id.uuidString)-\($0.timestamp.timeIntervalSince1970)-\($0.excludeFromStats)-\($0.excludePreviousGapFromStats)"
+            }
+            .joined(separator: "|")
     }
 
 }

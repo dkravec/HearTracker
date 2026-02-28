@@ -15,7 +15,6 @@ final class BatteryStatusViewModel: ObservableObject {
     @Published private(set) var predictedDeath: Date?
     @Published private(set) var currentBatteryAge: TimeInterval?
     @Published private(set) var sampleCount: Int = 0
-    @Published private(set) var lastCompletedDuration: TimeInterval?
 
     private let statsProvider: BatteryStatsProviding
     private let formatter: BatteryDurationFormatter
@@ -58,9 +57,8 @@ final class BatteryStatusViewModel: ObservableObject {
 
         avgDuration = snapshot.avgDuration
         predictedDeath = snapshot.predictedDeath
-        currentBatteryAge = snapshot.currentBatteryAge
+        currentBatteryAge = snapshot.currentAge
         sampleCount = snapshot.sampleCount
-        lastCompletedDuration = snapshot.lastCompletedDuration
 
         return snapshot
     }

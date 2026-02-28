@@ -13,6 +13,9 @@ struct HearingAidListView: View {
     @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
 
     @StateObject private var viewModel = HearingAidListViewModel()
+    private let statsService = BatteryStatsService()
+    private let durationFormatter = BatteryDurationFormatter()
+    private static let statsWindowSize: Int = 10
 
     private var activeAids: [HearingAid] {
         viewModel.activeAids(from: hearingAids)
@@ -29,12 +32,37 @@ struct HearingAidListView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
+                        if activeAids.isEmpty == false {
+                            SectionHeaderView(title: "Battery Stats")
+
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(activeAids) { aid in
+                                        let snapshot = statsService.statsSnapshot(
+                                            for: aid.id,
+                                            windowSize: Self.statsWindowSize,
+                                            context: context
+                                        )
+                                        HomeBatteryStatsCard(
+                                            aidName: aid.name,
+                                            snapshot: snapshot,
+                                            durationFormatter: durationFormatter
+                                        )
+                                    }
+                                }
+                                .padding(.horizontal, 1)
+                                .padding(.vertical, 2)
+                            }
+                        }
+
                         if activeAids.isEmpty {
                             EmptyStateView(
                                 title: "No Hearing Aids",
                                 systemImage: "ear",
                                 message: "Add a hearing aid to start tracking battery changes."
                             )
+                        } else {
+                            SectionHeaderView(title: "Hearing Aids")
                         }
 
                         ForEach(activeAids) { aid in
@@ -100,6 +128,85 @@ struct HearingAidListView: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
+    }
+}
+
+private struct HomeBatteryStatsCard: View {
+    let aidName: String
+    let snapshot: BatteryStatsSnapshot
+    let durationFormatter: BatteryDurationFormatter
+
+    var body: some View {
+        CardRowContainer {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "battery.75")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(aidName)
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 6)
+
+                    Text("\(snapshot.sampleCount) samples")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            Capsule(style: .continuous)
+                                .fill(Color.white.opacity(0.12))
+                        )
+                }
+
+                statRow(
+                    title: "Current Age",
+                    value: durationFormatter.optionalDaysText(from: snapshot.currentAge) ?? "Not enough data",
+                    icon: "clock"
+                )
+
+                statRow(
+                    title: "Average",
+                    value: durationFormatter.optionalDaysText(from: snapshot.avgDuration) ?? "Not enough data",
+                    icon: "chart.bar"
+                )
+
+                statRow(
+                    title: "Predicted",
+                    value: snapshot.predictedDeath.map { durationFormatter.relativeDateText(from: $0) } ?? "Not enough data",
+                    icon: "calendar.badge.clock"
+                )
+            }
+            .frame(width: 220, height: 200, alignment: .topLeading)
+        }
+    }
+
+    private func statRow(title: String, value: String, icon: String) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text(value)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
     }
 }
 

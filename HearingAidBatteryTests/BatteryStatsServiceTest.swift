@@ -24,7 +24,7 @@ struct BatteryStatsServiceTests {
         let snapshot = service.statsSnapshot(from: [newer, older], windowSize: 0, referenceDate: Date(timeIntervalSince1970: 3_000))
 
         #expect(snapshot.currentLogId == newer.id)
-        #expect(snapshot.currentInsertedAt == newer.timestamp)
+        #expect(snapshot.currentAge == 1_000)
     }
 
     @Test
@@ -40,7 +40,7 @@ struct BatteryStatsServiceTests {
         let snapshot = service.statsSnapshot(from: [current, previous, old], windowSize: 0, referenceDate: Date(timeIntervalSince1970: 5_000))
 
         #expect(snapshot.sampleCount == 2)
-        #expect(snapshot.lastCompletedDuration == 1_000)
+        #expect(snapshot.avgDuration == 1_500)
     }
 
     @Test
@@ -88,7 +88,7 @@ struct BatteryStatsServiceTests {
         let snapshot = service.statsSnapshot(from: [current, previous, old], windowSize: 0, referenceDate: Date(timeIntervalSince1970: 5_000))
 
         #expect(snapshot.sampleCount == 1)
-        #expect(snapshot.lastCompletedDuration == 2_000)
+        #expect(snapshot.avgDuration == 2_000)
     }
 
     @Test
@@ -108,7 +108,64 @@ struct BatteryStatsServiceTests {
         let snapshot = service.statsSnapshot(from: [current, previous, old], windowSize: 0, referenceDate: Date(timeIntervalSince1970: 5_000))
 
         #expect(snapshot.sampleCount == 1)
-        #expect(snapshot.lastCompletedDuration == 2_000)
+        #expect(snapshot.avgDuration == 2_000)
+    }
+
+    @Test
+    // Verifies sortedLogs returns logs in reverse-chronological order.
+    func sortedLogsReturnsNewestFirst() throws {
+        let service = BatteryStatsService()
+        let aid = HearingAid(name: "A")
+        let container = try ModelContainer(
+            for: Schema([HearingAid.self, BatteryLog.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+
+        let older = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 1_000))
+        let newer = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 2_000))
+        context.insert(aid)
+        context.insert(older)
+        context.insert(newer)
+        try context.save()
+
+        let sorted = service.sortedLogs(for: aid.id, context: context)
+        #expect(sorted.map(\.id) == [newer.id, older.id])
+    }
+
+    @Test
+    // Verifies raw APIs compute durations, average, prediction, and age consistently.
+    func rawApisReturnExpectedValues() throws {
+        let service = BatteryStatsService()
+        let aid = HearingAid(name: "A")
+        let container = try ModelContainer(
+            for: Schema([HearingAid.self, BatteryLog.self]),
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+
+        let current = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 4_000))
+        let previous = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 3_000))
+        let old = BatteryLog(hearingAid: aid, timestamp: Date(timeIntervalSince1970: 1_000))
+        context.insert(aid)
+        context.insert(current)
+        context.insert(previous)
+        context.insert(old)
+        try context.save()
+
+        let durations = service.durations(for: aid.id, windowSize: 0, context: context)
+        let average = service.averageDuration(for: aid.id, windowSize: 0, context: context)
+        let predicted = service.predictedDeath(for: aid.id, windowSize: 0, context: context)
+        let age = service.currentBatteryAge(
+            for: aid.id,
+            context: context,
+            referenceDate: Date(timeIntervalSince1970: 5_000)
+        )
+
+        #expect(durations == [1_000, 2_000])
+        #expect(average == 1_500)
+        #expect(predicted == Date(timeIntervalSince1970: 5_500))
+        #expect(age == 1_000)
     }
 
     @Test
@@ -116,12 +173,10 @@ struct BatteryStatsServiceTests {
     func batteryStatusViewModelUsesProviderSnapshot() throws {
         let expectedSnapshot = BatteryStatsSnapshot(
             currentLogId: UUID(),
-            currentInsertedAt: Date(timeIntervalSince1970: 2_000),
-            currentBatteryAge: 120,
+            currentAge: 120,
             avgDuration: 10_000,
             predictedDeath: Date(timeIntervalSince1970: 12_000),
-            sampleCount: 3,
-            lastCompletedDuration: 9_000
+            sampleCount: 3
         )
 
         let provider = InMemoryBatteryStatsProvider(snapshot: expectedSnapshot)
@@ -137,9 +192,8 @@ struct BatteryStatsServiceTests {
 
         #expect(viewModel.avgDuration == expectedSnapshot.avgDuration)
         #expect(viewModel.predictedDeath == expectedSnapshot.predictedDeath)
-        #expect(viewModel.currentBatteryAge == expectedSnapshot.currentBatteryAge)
+        #expect(viewModel.currentBatteryAge == expectedSnapshot.currentAge)
         #expect(viewModel.sampleCount == expectedSnapshot.sampleCount)
-        #expect(viewModel.lastCompletedDuration == expectedSnapshot.lastCompletedDuration)
     }
 }
 
