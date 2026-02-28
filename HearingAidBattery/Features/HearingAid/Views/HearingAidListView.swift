@@ -13,7 +13,6 @@ struct HearingAidListView: View {
     @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
 
     @StateObject private var viewModel = HearingAidListViewModel()
-    @State private var selectedAid: HearingAid?
 
     private var activeAids: [HearingAid] {
         viewModel.activeAids(from: hearingAids)
@@ -41,7 +40,6 @@ struct HearingAidListView: View {
                         ForEach(activeAids) { aid in
                             HearingAidCardRow(
                                 aid: aid,
-                                onOpen: { selectedAid = aid },
                                 onLogTapped: { viewModel.beginLog(for: aid) }
                             )
                         }
@@ -53,7 +51,6 @@ struct HearingAidListView: View {
                             ForEach(retiredAids) { aid in
                                 HearingAidCardRow(
                                     aid: aid,
-                                    onOpen: { selectedAid = aid },
                                     onLogTapped: { viewModel.beginLog(for: aid) }
                                 )
                             }
@@ -65,8 +62,11 @@ struct HearingAidListView: View {
                 .background(Color.clear)
             }
             .navigationTitle("Hearing Aids")
-            .navigationDestination(item: $selectedAid) { aid in
+            .navigationDestination(for: HearingAid.self) { aid in
                 HearingAidDetailView(aid: aid)
+            }
+            .navigationDestination(for: BatteryLogRoute.self) { route in
+                BatteryLogDetailContainer(route: route)
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -104,39 +104,37 @@ struct HearingAidListView: View {
 
 private struct HearingAidCardRow: View {
     let aid: HearingAid
-    let onOpen: () -> Void
     let onLogTapped: () -> Void
 
     var body: some View {
-        CardRowContainer {
-            HStack(alignment: .center, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(aid.name)
-                        .font(.headline)
+        NavigationLink(value: aid) {
+            CardRowContainer {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(aid.name)
+                            .font(.headline)
 
-                    if let model = aid.model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
-                        Text(model)
-                            .font(.subheadline)
+                        if let model = aid.model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
+                            Text(model)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text("\((aid.logs ?? []).count) changes")
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    Text("\((aid.logs ?? []).count) changes")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                    Spacer(minLength: 8)
 
-                Spacer(minLength: 8)
-
-                Button("Log") {
-                    onLogTapped()
+                    Button("Log") {
+                        onLogTapped()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityLabel("Log battery change for \(aid.name)")
                 }
-                .buttonStyle(.borderedProminent)
-                .accessibilityLabel("Log battery change for \(aid.name)")
             }
         }
-        .onTapGesture {
-            onOpen()
-        }
-        .contentShape(Rectangle())
+        .buttonStyle(.plain)
     }
 }

@@ -8,6 +8,12 @@
 import Foundation
 import SwiftData
 
+/// Lightweight value used for programmatic navigation to a battery-log detail screen.
+struct BatteryLogRoute: Hashable {
+    let logId: UUID
+    let hearingAidId: UUID
+}
+
 @Model
 final class BatteryLog {
     var id: UUID = UUID()

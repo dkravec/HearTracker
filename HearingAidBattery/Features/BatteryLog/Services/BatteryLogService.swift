@@ -11,6 +11,8 @@ import SwiftData
 @MainActor
 protocol BatteryLogProviding {
     func quickLog(for hearingAid: HearingAid, note: String?, context: ModelContext) throws
+    func updateLog(_ log: BatteryLog, timestamp: Date, note: String?, context: ModelContext) throws
+    func deleteLog(_ log: BatteryLog, context: ModelContext) throws
     func deleteLogs(at offsets: IndexSet, from logs: [BatteryLog], context: ModelContext) throws
 }
 
@@ -27,6 +29,21 @@ final class BatteryLogService: BatteryLogProviding {
         )
 
         context.insert(newLog)
+        try context.save()
+    }
+
+    func updateLog(_ log: BatteryLog, timestamp: Date, note: String?, context: ModelContext) throws {
+        let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedNote = (trimmedNote?.isEmpty == true) ? nil : trimmedNote
+
+        log.timestamp = timestamp
+        log.note = normalizedNote
+
+        try context.save()
+    }
+
+    func deleteLog(_ log: BatteryLog, context: ModelContext) throws {
+        context.delete(log)
         try context.save()
     }
 

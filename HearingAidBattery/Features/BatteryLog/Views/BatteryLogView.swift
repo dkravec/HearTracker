@@ -40,6 +40,7 @@ struct BatteryLogListView: View {
 struct BatteryLogRow: View {
     let log: BatteryLog
     let rowModel: BatteryLogRowModel
+    var showsChevron: Bool = false
 
     var body: some View {
         CardRowContainer {
@@ -51,6 +52,12 @@ struct BatteryLogRow: View {
 
                     if rowModel.isCurrent {
                         Text("Current")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if showsChevron {
+                        Image(systemName: "chevron.right")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

@@ -1,4 +1,4 @@
-# Hearing Aid Battery Tracker
+# HearTracker Xcode
 Created by Daniel Kravec, on Feb 21, 2026
 
 # Hearing Aid Battery Tracker – Feature & Data Spec

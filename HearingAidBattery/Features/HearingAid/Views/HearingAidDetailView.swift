@@ -16,8 +16,7 @@ struct HearingAidDetailView: View {
     @Query private var logs: [BatteryLog]
 
     @StateObject private var viewModel = HearingAidDetailViewModel()
-    @StateObject private var logListViewModel = BatteryLogListViewModel()
-    @StateObject private var statusViewModel = BatteryStatusViewModel()
+    private static let durationFormatter = BatteryDurationFormatter()
 
     init(aid: HearingAid) {
         self.aid = aid
@@ -27,14 +26,6 @@ struct HearingAidDetailView: View {
             sort: \BatteryLog.timestamp,
             order: .reverse
         )
-    }
-
-    private var refreshSignature: String {
-        let logsSignature = logs
-            .map { "\($0.id.uuidString)-\($0.timestamp.timeIntervalSince1970)-\($0.note ?? "")" }
-            .joined(separator: "|")
-
-        return "\(aid.id.uuidString)-\(aid.name)-\(aid.model ?? "")-\(aid.retired)-\(logsSignature)"
     }
 
     var body: some View {
@@ -59,15 +50,12 @@ struct HearingAidDetailView: View {
                     )
                 }
 
-                ForEach(Array(zip(logs, logListViewModel.rows)), id: \.0.id) { log, rowModel in
-                    BatteryLogRow(log: log, rowModel: rowModel)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                deleteLog(log)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
+                ForEach(Array(logs.enumerated()), id: \.element.id) { index, log in
+                    NavigationLink(value: BatteryLogRoute(logId: log.id, hearingAidId: aid.id)) {
+                        BatteryLogRow(log: log, rowModel: rowModel(for: index), showsChevron: true)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isEditing)
                 }
             }
             .padding(.horizontal, 16)
@@ -75,19 +63,29 @@ struct HearingAidDetailView: View {
         }
         .navigationTitle(aid.name)
         .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    viewModel.beginLog()
-                } label: {
-                    Image(systemName: "plus")
-                }
-            }
-
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(viewModel.isEditing ? "Done" : "Edit") {
-                    if viewModel.isEditing {
+            if viewModel.isEditing {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
                         viewModel.endEditing(resetWith: aid, reset: true)
-                    } else {
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        viewModel.saveEdits(for: aid, context: context)
+                    }
+                    .fontWeight(.semibold)
+                }
+            } else {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        viewModel.beginLog()
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                }
+
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Edit") {
                         viewModel.beginEditing(with: aid)
                     }
                 }
@@ -106,11 +104,9 @@ struct HearingAidDetailView: View {
                 note: $viewModel.logNote,
                 onSave: { note in
                     viewModel.saveLog(for: aid, note: note, context: context)
-                    refreshDerivedState()
                 },
                 onSaveWithoutNote: {
                     viewModel.saveLogWithoutNote(for: aid, context: context)
-                    refreshDerivedState()
                 },
                 onCancel: {
                     viewModel.endLog()
@@ -120,10 +116,7 @@ struct HearingAidDetailView: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
-        .task(id: refreshSignature) {
-            refreshDerivedState()
-            viewModel.syncFromAid(aid)
-        }
+        .onAppear { viewModel.syncFromAid(aid) }
         .appBackground()
     }
 
@@ -157,20 +150,6 @@ struct HearingAidDetailView: View {
 
                 Toggle("Mark as retired", isOn: $viewModel.editRetired)
 
-                HStack {
-                    Button("Cancel") {
-                        viewModel.endEditing(resetWith: aid, reset: true)
-                    }
-
-                    Spacer()
-
-                    Button("Save Changes") {
-                        viewModel.saveEdits(for: aid, context: context)
-                        refreshDerivedState()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
                 Divider()
 
                 Button(role: .destructive) {
@@ -184,23 +163,26 @@ struct HearingAidDetailView: View {
         }
     }
 
-    private func refreshDerivedState() {
-        let snapshot = statusViewModel.refresh(
-            hearingAidId: aid.id,
-            windowSize: 0,
-            context: context
-        )
-        logListViewModel.refresh(sortedLogs: logs, currentLogId: snapshot.currentLogId)
-    }
-
     private func deleteHearingAid() {
         viewModel.deleteHearingAid(aid, context: context)
         dismiss()
     }
 
-    private func deleteLog(_ log: BatteryLog) {
-        guard let index = logs.firstIndex(where: { $0.id == log.id }) else { return }
-        viewModel.deleteLogs(at: IndexSet(integer: index), logs: logs, context: context)
-        refreshDerivedState()
+    private func rowModel(for index: Int) -> BatteryLogRowModel {
+        let log = logs[index]
+        let duration: TimeInterval? = {
+            guard index > 0 else { return nil }
+            let newerLog = logs[index - 1]
+            let interval = newerLog.timestamp.timeIntervalSince(log.timestamp)
+            return interval > 0 ? interval : nil
+        }()
+
+        return BatteryLogRowModel(
+            id: log.id,
+            isCurrent: index == 0,
+            rawDuration: duration,
+            durationText: Self.durationFormatter.optionalDaysText(from: duration)
+        )
     }
+
 }

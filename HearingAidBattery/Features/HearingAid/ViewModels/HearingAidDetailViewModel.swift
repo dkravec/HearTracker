@@ -70,6 +70,14 @@ final class HearingAidDetailViewModel: ObservableObject {
         try? hearingAidService.deleteHearingAid(hearingAid, context: context)
     }
 
+    func updateLog(_ log: BatteryLog, timestamp: Date, note: String?, context: ModelContext) {
+        try? batteryLogService.updateLog(log, timestamp: timestamp, note: note, context: context)
+    }
+
+    func deleteLog(_ log: BatteryLog, context: ModelContext) {
+        try? batteryLogService.deleteLog(log, context: context)
+    }
+
     func deleteLogs(at offsets: IndexSet, logs: [BatteryLog], context: ModelContext) {
         try? batteryLogService.deleteLogs(at: offsets, from: logs, context: context)
     }
