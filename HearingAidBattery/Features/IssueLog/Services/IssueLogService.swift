@@ -12,7 +12,8 @@ import SwiftData
 final class IssueLogService {
     func createIssueLog(
         for hearingAid: HearingAid,
-        category: String,
+        timestamp: Date = Date(),
+        issue: String,
         severity: Int? = nil,
         note: String? = nil,
         linkedBatteryLogId: UUID? = nil,
@@ -20,7 +21,8 @@ final class IssueLogService {
     ) throws {
         let issueLog = IssueLog(
             hearingAid: hearingAid,
-            category: category,
+            timestamp: timestamp,
+            issue: issue.trimmingCharacters(in: .whitespacesAndNewlines),
             severity: severity,
             note: note?.trimmingCharacters(in: .whitespacesAndNewlines)
         )
@@ -34,5 +36,41 @@ final class IssueLogService {
     func deleteIssueLog(_ issueLog: IssueLog, context: ModelContext) throws {
         context.delete(issueLog)
         try context.save()
+    }
+
+    /// Convenience: resolves the hearing aid, links to the latest battery log,
+    /// and creates the issue in one call. Shared by AddEntryChoiceSheet and
+    /// IssueLogListView so the save logic isn't duplicated.
+    func saveFromSheet(
+        aids: [HearingAid],
+        singleAid: HearingAid? = nil,
+        hearingAidId: UUID?,
+        timestamp: Date,
+        issue: String,
+        severity: Int?,
+        note: String?,
+        context: ModelContext
+    ) {
+        let targetAid: HearingAid? = {
+            if let singleAid { return singleAid }
+            guard let hearingAidId else { return nil }
+            return aids.first(where: { $0.id == hearingAidId })
+        }()
+        guard let targetAid else { return }
+
+        let currentLogId = (targetAid.logs ?? [])
+            .sorted { $0.timestamp > $1.timestamp }
+            .first?
+            .id
+
+        try? createIssueLog(
+            for: targetAid,
+            timestamp: timestamp,
+            issue: issue,
+            severity: severity,
+            note: note,
+            linkedBatteryLogId: currentLogId,
+            context: context
+        )
     }
 }

@@ -13,7 +13,7 @@ final class IssueLog {
     var id: UUID = UUID()
     var timestamp: Date = Date()
 
-    var category: String = "other"   // keep simple
+    var issue: String = ""
     var severity: Int?               // 1–5
     var note: String?
 
@@ -22,12 +22,12 @@ final class IssueLog {
 
     init(hearingAid: HearingAid,
          timestamp: Date = Date(),
-         category: String,
+         issue: String,
          severity: Int? = nil,
          note: String? = nil) {
         self.hearingAid = hearingAid
         self.timestamp = timestamp
-        self.category = category
+        self.issue = issue
         self.severity = severity
         self.note = note
     }

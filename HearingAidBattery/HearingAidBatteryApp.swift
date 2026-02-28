@@ -16,6 +16,7 @@ struct HearingAidBatteryApp: App {
             HearingAid.self,
             BatteryLog.self,
             BatteryPack.self,
+            IssueLog.self,
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,

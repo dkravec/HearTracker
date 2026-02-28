@@ -262,10 +262,12 @@ struct IssueLogServiceTests {
         let aid = HearingAid(name: "A")
         context.insert(aid)
         let linkedId = UUID()
+        let timestamp = Date(timeIntervalSince1970: 12_345)
 
         try service.createIssueLog(
             for: aid,
-            category: "audio",
+            timestamp: timestamp,
+            issue: "audio",
             severity: 3,
             note: "  static noise  ",
             linkedBatteryLogId: linkedId,
@@ -274,6 +276,8 @@ struct IssueLogServiceTests {
 
         let issues = try context.fetch(FetchDescriptor<IssueLog>())
         #expect(issues.count == 1)
+        #expect(issues[0].timestamp == timestamp)
+        #expect(issues[0].severity == 3)
         #expect(issues[0].note == "static noise")
         #expect(issues[0].linkedBatteryLogId == linkedId)
     }

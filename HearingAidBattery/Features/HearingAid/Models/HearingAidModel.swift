@@ -20,6 +20,9 @@ final class HearingAid {
     @Relationship(deleteRule: .cascade, inverse: \BatteryLog.hearingAid)
     var logs: [BatteryLog]?
 
+    @Relationship(deleteRule: .cascade, inverse: \IssueLog.hearingAid)
+    var issues: [IssueLog]?
+
     init(name: String, model: String? = nil, batteryType: String? = nil, retired: Bool = false) {
         self.name = name
         self.model = model

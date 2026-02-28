@@ -12,11 +12,13 @@ struct HearingAidListView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
     @Query(sort: \BatteryPack.purchaseDate, order: .reverse) private var packs: [BatteryPack]
+    @Query(sort: \IssueLog.timestamp, order: .reverse) private var issues: [IssueLog]
 
     @StateObject private var viewModel = HearingAidListViewModel()
     private let statsService = BatteryStatsService()
     private let batteryPackService = BatteryPackService()
     private let durationFormatter = BatteryDurationFormatter()
+    private let currencyFormatter = CurrencyFormatter.shared
     private static let statsWindowSize: Int = 10
 
     @State private var showsAddActions: Bool = false
@@ -71,7 +73,8 @@ struct HearingAidListView: View {
                                             aidName: aid.name,
                                             snapshot: snapshot,
                                             durationFormatter: durationFormatter,
-                                            costPerDaySummary: costPerDaySummary(from: costStats)
+                                            costStats: costStats,
+                                            targetCurrency: mostRecentCurrencyCode
                                         )
                                     }
                                 }
@@ -142,10 +145,10 @@ struct HearingAidListView: View {
                                             .font(.subheadline)
 
                                         if let amount = pack.priceAmount, let code = pack.currencyCode {
-                                            Text("Price: \(currencyText(amount: amount, currencyCode: code))")
+                                            Text("Price: \(currencyFormatter.format(amount, currencyCode: code))")
                                                 .font(.subheadline)
-                                            if let pricePerBattery = pricePerBatteryText(for: pack, currencyCode: code) {
-                                                Text("Price per battery: \(pricePerBattery)")
+                                            if let ppb = currencyFormatter.pricePerBattery(priceAmount: pack.priceAmount, quantityPurchased: pack.quantityPurchased, currencyCode: pack.currencyCode) {
+                                                Text("Price per battery: \(ppb)")
                                                     .font(.subheadline)
                                                     .foregroundStyle(.secondary)
                                             }
@@ -171,6 +174,21 @@ struct HearingAidListView: View {
                                 )
                             }
                         }
+
+                        SectionHeaderView(title: "Issue History")
+                            .padding(.top, 8)
+
+                        if activeIssues.isEmpty {
+                            EmptyStateView(
+                                title: "No Issues Logged",
+                                systemImage: "exclamationmark.bubble",
+                                message: "Log an issue from Add Item."
+                            )
+                        } else {
+                            ForEach(activeIssues) { issue in
+                                IssueCardRow(issue: issue)
+                            }
+                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -189,7 +207,7 @@ struct HearingAidListView: View {
                     Button {
                         showsAddActions = true
                     } label: {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: "plus")
                             .font(.title3)
                     }
                 }
@@ -279,35 +297,21 @@ struct HearingAidListView: View {
         )
     }
 
-    private func costPerDaySummary(from costStats: [BatteryPackCostStat]) -> String {
-        guard costStats.isEmpty == false else { return "Not enough data" }
-
-        let pieces = costStats.compactMap { stat -> String? in
-            guard let costPerDay = stat.costPerDay else { return nil }
-            return "\(stat.currencyCode) \(currencyText(amount: costPerDay, currencyCode: stat.currencyCode))/day"
-        }
-
-        if pieces.isEmpty { return "Not enough data" }
-        if pieces.count == 1 { return pieces[0] }
-        return "\(pieces[0]) +\(pieces.count - 1)"
-    }
-
-    private func currencyText(amount: Decimal, currencyCode: String) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currencyCode
-        let number = NSDecimalNumber(decimal: amount)
-        return formatter.string(from: number) ?? number.stringValue
-    }
-
-    private func pricePerBatteryText(for pack: BatteryPack, currencyCode: String) -> String? {
-        guard let amount = pack.priceAmount, pack.quantityPurchased > 0 else { return nil }
-        let pricePerBattery = amount / Decimal(pack.quantityPurchased)
-        return currencyText(amount: pricePerBattery, currencyCode: currencyCode)
-    }
-
     private var availablePacks: [BatteryPack] {
         packs.filter { $0.quantityRemaining > 0 }
+    }
+
+    private var activeIssues: [IssueLog] {
+        issues.filter { issue in
+            guard let aid = issue.hearingAid else { return false }
+            return aid.retired == false
+        }
+    }
+
+    /// The currency code from the most recently purchased pack, or the user's locale currency.
+    private var mostRecentCurrencyCode: String {
+        packs.first(where: { $0.currencyCode != nil })?.currencyCode?.uppercased()
+            ?? CurrencyFormatter.localeCurrencyCode
     }
 }
 
@@ -315,7 +319,11 @@ private struct HomeBatteryStatsCard: View {
     let aidName: String
     let snapshot: BatteryStatsSnapshot
     let durationFormatter: BatteryDurationFormatter
-    let costPerDaySummary: String
+    let costStats: [BatteryPackCostStat]
+    let targetCurrency: String
+
+    @State private var costPerDaySummary: String = "Loading…"
+    private let currencyFormatter = CurrencyFormatter.shared
 
     var body: some View {
         CardRowContainer {
@@ -361,6 +369,12 @@ private struct HomeBatteryStatsCard: View {
                 )
             }
             .frame(width: 245, height: 200, alignment: .topLeading)
+        }
+        .task {
+            costPerDaySummary = await currencyFormatter.costPerDaySummaryConverted(
+                from: costStats,
+                targetCurrency: targetCurrency
+            )
         }
     }
 
@@ -435,12 +449,14 @@ private struct HearingAidCardRow: View {
 
 private struct AddEntryChoiceSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
     let activeAids: [HearingAid]
     let availablePacks: [BatteryPack]
     let packs: [BatteryPack]
     let defaultAidId: UUID?
     let onSaveBatteryLog: (HearingAid, Date, String?, UUID?) -> Void
     let onSavePack: (String, String?, Date, Int, Int, Decimal?, String?) -> Void
+    private let issueLogService = IssueLogService()
 
     @State private var logNote: String = ""
     @State private var logTimestamp: Date = Date()
@@ -500,6 +516,37 @@ private struct AddEntryChoiceSheet: View {
                         AddItemActionRowLabel(title: "Hearing Aid", subtitle: "Add a new device", systemImage: "ear")
                     }
                     .buttonStyle(.plain)
+
+                    NavigationLink {
+                        AddIssueLogSheet(
+                            hearingAids: activeAids,
+                            preselectedHearingAidId: selectedAidId ?? defaultAidId ?? activeAids.first?.id,
+                            onSave: { timestamp, hearingAidId, issue, severity, note in
+                                issueLogService.saveFromSheet(
+                                    aids: activeAids,
+                                    hearingAidId: hearingAidId,
+                                    timestamp: timestamp,
+                                    issue: issue,
+                                    severity: severity,
+                                    note: note,
+                                    context: context
+                                )
+                                dismiss()
+                            },
+                            onCancel: {
+                                dismiss()
+                            }
+                        )
+                    } label: {
+                        AddItemActionRowLabel(
+                            title: "Issue",
+                            subtitle: issueSubtitle,
+                            systemImage: "exclamationmark.bubble",
+                            isDisabled: activeAids.isEmpty
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(activeAids.isEmpty)
                 }
                 .padding(16)
             }
@@ -513,6 +560,13 @@ private struct AddEntryChoiceSheet: View {
             return "Quick log for \(onlyAid.name)"
         }
         return "Log a battery change"
+    }
+
+    private var issueSubtitle: String {
+        if activeAids.isEmpty {
+            return "Add a hearing aid first"
+        }
+        return "What's the problem?"
     }
 }
 

@@ -101,8 +101,8 @@ struct BatteryPackSectionView: View {
                                     .font(.subheadline)
                             }
 
-                            if let pricePerBatteryText = pricePerBatteryText(for: pack) {
-                                Text("Price per battery: \(pricePerBatteryText)")
+                            if let ppb = CurrencyFormatter.shared.pricePerBattery(priceAmount: pack.priceAmount, quantityPurchased: pack.quantityPurchased, currencyCode: pack.currencyCode) {
+                                Text("Price per battery: \(ppb)")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -127,7 +127,7 @@ struct BatteryPackSectionView: View {
                             Text(stat.currencyCode)
                                 .font(.headline)
 
-                            Text("Avg cost per battery: \(currencyText(amount: stat.averageCostPerBattery, currencyCode: stat.currencyCode))")
+                            Text("Avg cost per battery: \(CurrencyFormatter.shared.format(stat.averageCostPerBattery, currencyCode: stat.currencyCode))")
                                 .font(.subheadline)
 
                             Text("Cost per day: \(costPerDayText(for: stat))")
@@ -191,27 +191,12 @@ struct BatteryPackSectionView: View {
 
     private func priceText(for pack: BatteryPack) -> String? {
         guard let amount = pack.priceAmount, let currency = pack.currencyCode else { return nil }
-        return "Price: \(currencyText(amount: amount, currencyCode: currency))"
-    }
-
-    private func pricePerBatteryText(for pack: BatteryPack) -> String? {
-        guard let amount = pack.priceAmount, let currency = pack.currencyCode else { return nil }
-        guard pack.quantityPurchased > 0 else { return nil }
-        let pricePerBattery = amount / Decimal(pack.quantityPurchased)
-        return currencyText(amount: pricePerBattery, currencyCode: currency)
+        return "Price: \(CurrencyFormatter.shared.format(amount, currencyCode: currency))"
     }
 
     private func costPerDayText(for stat: BatteryPackCostStat) -> String {
         guard let costPerDay = stat.costPerDay else { return "Not enough data" }
-        return currencyText(amount: costPerDay, currencyCode: stat.currencyCode)
-    }
-
-    private func currencyText(amount: Decimal, currencyCode: String) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.currencyCode = currencyCode
-        let number = NSDecimalNumber(decimal: amount)
-        return formatter.string(from: number) ?? "\(currencyCode) \(number.stringValue)"
+        return CurrencyFormatter.shared.format(costPerDay, currencyCode: stat.currencyCode)
     }
 }
 
@@ -224,7 +209,10 @@ struct AddBatteryPackSheet: View {
     @State private var batteriesPerPack: Int = 6
     @State private var numberOfPacks: Int = 1
     @State private var priceText: String = ""
-    @State private var currencyCode: String = "USD"
+    @State private var currencyCode: String = CurrencyFormatter.localeCurrencyCode
+    @State private var customCurrencyCode: String = ""
+
+    private static let otherSentinel = "__OTHER__"
 
     let existingPacks: [BatteryPack]
     let previousPack: BatteryPack?
@@ -289,16 +277,16 @@ struct AddBatteryPackSheet: View {
                         }
                     }
                 }
-                HStack(spacing: 8) {
-                    TextField("Currency code", text: $currencyCode)
-                        .textInputAutocapitalization(.characters)
-                    if currencySuggestions.isEmpty == false {
-                        Menu("Currency") {
-                            ForEach(currencySuggestions, id: \.self) { suggestion in
-                                Button(suggestion) { currencyCode = suggestion }
-                            }
-                        }
+                Picker("Currency", selection: $currencyCode) {
+                    ForEach(availableCurrencyCodes, id: \.self) { code in
+                        Text(code).tag(code)
                     }
+                    Text("Other…").tag(Self.otherSentinel)
+                }
+                if currencyCode == Self.otherSentinel {
+                    TextField("Currency code (e.g. ZAR)", text: $customCurrencyCode)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
                 }
             }
         }
@@ -327,8 +315,12 @@ struct AddBatteryPackSheet: View {
         }
     }
 
+    private var effectiveCurrencyCode: String {
+        currencyCode == Self.otherSentinel ? customCurrencyCode : currencyCode
+    }
+
     private var normalizedCurrencyCode: String? {
-        let trimmed = currencyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        let trimmed = effectiveCurrencyCode.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         return trimmed.isEmpty ? nil : trimmed
     }
 
@@ -345,8 +337,15 @@ struct AddBatteryPackSheet: View {
         uniqueStrings(existingPacks.compactMap(\.brand))
     }
 
-    private var currencySuggestions: [String] {
-        uniqueStrings(existingPacks.compactMap(\.currencyCode).map { $0.uppercased() })
+    private var availableCurrencyCodes: [String] {
+        var codes = CurrencyFormatter.commonCurrencyCodes
+        let existing = uniqueStrings(existingPacks.compactMap(\.currencyCode).map { $0.uppercased() })
+        for code in existing.reversed() {
+            if !codes.contains(code) {
+                codes.insert(code, at: 0)
+            }
+        }
+        return codes
     }
 
     private var priceSuggestions: [String] {
@@ -379,8 +378,6 @@ struct AddBatteryPackSheet: View {
     }
 
     private func decimalValue(from input: String) -> Decimal? {
-        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.isEmpty == false else { return nil }
-        return Decimal(string: trimmed)
+        CurrencyFormatter.decimalFromInput(input)
     }
 }

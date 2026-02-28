@@ -54,6 +54,22 @@ struct HearingAidDetailView: View {
 
                 statsSection
 
+                NavigationLink {
+                    IssueLogView(hearingAid: aid)
+                } label: {
+                    CardRowContainer {
+                        HStack {
+                            Label("Issue History", systemImage: "exclamationmark.bubble")
+                                .font(.headline)
+                            Spacer(minLength: 8)
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+
                 SectionHeaderView(title: "Battery Logs")
                     .padding(.top, viewModel.isEditing ? 4 : 0)
 
