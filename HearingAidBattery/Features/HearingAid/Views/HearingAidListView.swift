@@ -19,7 +19,7 @@ struct HearingAidListView: View {
     private let batteryPackService = BatteryPackService()
     private let durationFormatter = BatteryDurationFormatter()
     private let currencyFormatter = CurrencyFormatter.shared
-    private static let statsWindowSize: Int = 10
+    private static let statsWindowSize: Int = 10 // change to 0 for all
 
     @State private var showsAddActions: Bool = false
     @State private var packPendingDelete: BatteryPack?
@@ -163,18 +163,6 @@ struct HearingAidListView: View {
                             }
                         }
 
-                        if viewModel.showsRetired, !retiredAids.isEmpty {
-                            SectionHeaderView(title: "Retired")
-                                .padding(.top, 8)
-
-                            ForEach(retiredAids) { aid in
-                                HearingAidCardRow(
-                                    aid: aid,
-                                    onLogTapped: { viewModel.beginLog(for: aid) }
-                                )
-                            }
-                        }
-
                         SectionHeaderView(title: "Issue History")
                             .padding(.top, 8)
 
@@ -188,6 +176,26 @@ struct HearingAidListView: View {
                             ForEach(activeIssues) { issue in
                                 IssueCardRow(issue: issue)
                             }
+                        }
+
+                        if viewModel.showsRetired, !retiredAids.isEmpty {
+                            SectionHeaderView(title: "Retired")
+                                .padding(.top, 8)
+
+                            ForEach(retiredAids) { aid in
+                                HearingAidCardRow(
+                                    aid: aid,
+                                    onLogTapped: { viewModel.beginLog(for: aid) }
+                                )
+                            }
+                        }
+
+                        if retiredAids.isEmpty == false {
+                            CardRowContainer {
+                                Toggle("Show Retired Hearing Aids", isOn: $viewModel.showsRetired)
+                                    .font(.subheadline)
+                            }
+                            .padding(.top, 8)
                         }
                     }
                     .padding(.horizontal, 16)
@@ -213,11 +221,12 @@ struct HearingAidListView: View {
                 }
 
                 ToolbarItem(placement: .navigationBarLeading) {
-                    if !retiredAids.isEmpty {
-                        Button(viewModel.showsRetired ? "Hide Retired" : "Show Retired") {
-                            viewModel.showsRetired.toggle()
-                        }
+                    NavigationLink {
+                        SettingView().appBackground()
+                    } label: {
+                        Image(systemName: "gearshape")
                     }
+                    .accessibilityLabel("Settings")
                 }
             }
         }
