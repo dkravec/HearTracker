@@ -53,6 +53,25 @@ final class IssueLogService {
         try context.save()
     }
 
+    func resolveIssue(
+        _ issueLog: IssueLog,
+        resolvedAt: Date,
+        resolutionNote: String,
+        context: ModelContext
+    ) throws {
+        issueLog.isResolved = true
+        issueLog.resolvedAt = resolvedAt
+        issueLog.resolutionNote = normalizedOptionalText(resolutionNote)
+        try context.save()
+    }
+
+    func unresolveIssue(_ issueLog: IssueLog, context: ModelContext) throws {
+        issueLog.isResolved = false
+        issueLog.resolvedAt = nil
+        issueLog.resolutionNote = nil
+        try context.save()
+    }
+
     /// Convenience: resolves the hearing aid, links to the latest battery log,
     /// and creates the issue in one call. Shared by AddEntryChoiceSheet and
     /// IssueLogListView so the save logic isn't duplicated.

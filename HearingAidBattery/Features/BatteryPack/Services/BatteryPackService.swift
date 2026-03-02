@@ -11,6 +11,7 @@ import SwiftData
 enum BatteryPackServiceError: LocalizedError {
     case invalidUsageCount
     case usageExceedsAvailable
+    case packMarkedDone
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +19,8 @@ enum BatteryPackServiceError: LocalizedError {
             return "Enter at least 1 battery."
         case .usageExceedsAvailable:
             return "Cannot use more batteries than are remaining in this pack."
+        case .packMarkedDone:
+            return "This pack is marked done. Mark it active to use it."
         }
     }
 }
@@ -127,6 +130,9 @@ final class BatteryPackService {
         guard normalizedCount > 0 else {
             throw BatteryPackServiceError.invalidUsageCount
         }
+        guard batteryPack.isDone == false else {
+            throw BatteryPackServiceError.packMarkedDone
+        }
         guard normalizedCount <= batteryPack.quantityRemaining else {
             throw BatteryPackServiceError.usageExceedsAvailable
         }
@@ -152,7 +158,7 @@ final class BatteryPackService {
     ) -> BatteryPack? {
         let descriptor = FetchDescriptor<BatteryPack>(
             predicate: #Predicate<BatteryPack> {
-                $0.quantityRemaining > 0
+                $0.quantityRemaining > 0 && $0.isDone == false
             },
             sortBy: [SortDescriptor(\BatteryPack.purchaseDate, order: .forward)]
         )
@@ -178,6 +184,25 @@ final class BatteryPackService {
 
         applyUsage(count: 1, to: packToConsume)
         return packToConsume
+    }
+
+    func markPackDone(
+        _ batteryPack: BatteryPack,
+        markLost: Bool,
+        context: ModelContext
+    ) throws {
+        batteryPack.isDone = true
+        batteryPack.isMarkedLost = markLost
+        try context.save()
+    }
+
+    func unmarkPackDone(
+        _ batteryPack: BatteryPack,
+        context: ModelContext
+    ) throws {
+        batteryPack.isDone = false
+        batteryPack.isMarkedLost = false
+        try context.save()
     }
 
     func costStatsByCurrency(from packs: [BatteryPack], averageDuration: TimeInterval?) -> [BatteryPackCostStat] {

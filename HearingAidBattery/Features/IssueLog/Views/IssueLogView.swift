@@ -15,6 +15,8 @@ struct IssueLogListView: View {
     @Query private var issues: [IssueLog]
 
     @State private var showsAddIssueSheet: Bool = false
+    @State private var issuePendingResolve: IssueLog?
+    @State private var errorMessage: String?
 
     private let issueLogService = IssueLogService()
 
@@ -48,19 +50,24 @@ struct IssueLogListView: View {
                         message: "Issue tracking entries will appear here."
                     )
                 } else {
-                    ForEach(issues) { issue in
-                        NavigableCardRow {
-                            IssueLogDetailView(
-                                issue: issue,
-                                hearingAids: hearingAids,
-                                issueLogService: issueLogService
-                            )
-                        } content: {
-                            IssueCardRow(
-                                issue: issue,
-                                showsAidName: hearingAid == nil,
-                                wrapsInCard: false
-                            )
+                    if unresolvedIssues.isEmpty {
+                        CardRowContainer {
+                            Text("No unresolved issues.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        SectionHeaderView(title: "Unresolved")
+                        ForEach(unresolvedIssues) { issue in
+                            issueRow(issue)
+                        }
+                    }
+
+                    if resolvedIssues.isEmpty == false {
+                        SectionHeaderView(title: "Resolved")
+                            .padding(.top, 4)
+                        ForEach(resolvedIssues) { issue in
+                            issueRow(issue)
                         }
                     }
                 }
@@ -72,8 +79,10 @@ struct IssueLogListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Add Issue") {
+                Button {
                     showsAddIssueSheet = true
+                } label: {
+                    Label("Add Issue", systemImage: "plus")
                 }
             }
         }
@@ -102,7 +111,68 @@ struct IssueLogListView: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
+        .sheet(item: $issuePendingResolve) { issue in
+            ResolveIssueSheet(
+                issue: issue,
+                onSave: { resolvedAt, resolutionNote in
+                    try issueLogService.resolveIssue(
+                        issue,
+                        resolvedAt: resolvedAt,
+                        resolutionNote: resolutionNote,
+                        context: context
+                    )
+                    issuePendingResolve = nil
+                },
+                onCancel: {
+                    issuePendingResolve = nil
+                }
+            )
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .appBackground()
+        }
         .appBackground()
+        .errorAlert(title: "Unable to Complete Action", message: $errorMessage)
+    }
+
+    private var unresolvedIssues: [IssueLog] {
+        issues.filter { !$0.isResolved }
+    }
+
+    private var resolvedIssues: [IssueLog] {
+        issues.filter { $0.isResolved }
+    }
+
+    @ViewBuilder
+    private func issueRow(_ issue: IssueLog) -> some View {
+        NavigableCardRow {
+            IssueLogDetailView(
+                issue: issue,
+                hearingAids: hearingAids,
+                issueLogService: issueLogService
+            )
+        } content: {
+            IssueCardRow(
+                issue: issue,
+                showsAidName: hearingAid == nil,
+                wrapsInCard: false
+            )
+        }
+        .contextMenu {
+            if issue.isResolved {
+                Button("Mark as Unresolved") {
+                    do {
+                        try issueLogService.unresolveIssue(issue, context: context)
+                    } catch {
+                        errorMessage = "Could not mark issue as unresolved."
+                    }
+                }
+            } else {
+                Button("Mark as Resolved") {
+                    issuePendingResolve = issue
+                }
+            }
+        }
     }
 }
 
@@ -132,6 +202,12 @@ struct IssueCardRow: View {
                 Text(issue.timestamp.formatted(date: .abbreviated, time: .shortened))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            if issue.isResolved {
+                Text("Resolved")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.green)
             }
 
             if showsAidName {
@@ -164,6 +240,7 @@ struct IssueLogDetailView: View {
 
     @State private var showsEditSheet: Bool = false
     @State private var showsDeleteConfirm: Bool = false
+    @State private var showsResolveSheet: Bool = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -196,8 +273,49 @@ struct IssueLogDetailView: View {
                     }
                 }
 
+                SectionHeaderView(title: "Resolution")
+                CardRowContainer {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(issue.isResolved ? "Resolved" : "Unresolved")
+                            .font(.headline)
+                            .foregroundStyle(issue.isResolved ? .green : .secondary)
+
+                        if issue.isResolved {
+                            if let resolvedAt = issue.resolvedAt {
+                                Text("Resolved at: \(resolvedAt.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let resolutionNote = issue.resolutionNote, resolutionNote.isEmpty == false {
+                                Text(resolutionNote)
+                                    .font(.subheadline)
+                            }
+                        } else {
+                            Text("This issue is still open.")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
                 CardRowContainer {
                     VStack(alignment: .leading, spacing: 10) {
+                        if issue.isResolved {
+                            Button("Mark as Unresolved") {
+                                do {
+                                    try issueLogService.unresolveIssue(issue, context: context)
+                                } catch {
+                                    errorMessage = "Could not mark issue as unresolved."
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                        } else {
+                            Button("Mark as Resolved") {
+                                showsResolveSheet = true
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+
                         Button("Delete Issue", role: .destructive) {
                             showsDeleteConfirm = true
                         }
@@ -248,6 +366,30 @@ struct IssueLogDetailView: View {
                 }
             )
             .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .appBackground()
+        }
+        .sheet(isPresented: $showsResolveSheet) {
+            ResolveIssueSheet(
+                issue: issue,
+                onSave: { resolvedAt, resolutionNote in
+                    do {
+                        try issueLogService.resolveIssue(
+                            issue,
+                            resolvedAt: resolvedAt,
+                            resolutionNote: resolutionNote,
+                            context: context
+                        )
+                        showsResolveSheet = false
+                    } catch {
+                        errorMessage = (error as? LocalizedError)?.errorDescription ?? "Could not resolve issue."
+                    }
+                },
+                onCancel: {
+                    showsResolveSheet = false
+                }
+            )
+            .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
             .appBackground()
         }
@@ -340,9 +482,14 @@ struct AddIssueLogSheet: View {
                         selection: $timestamp,
                         displayedComponents: [.date, .hourAndMinute]
                     )
-                    TextField("What's the problem", text: $issue)
-                        .textInputAutocapitalization(.sentences)
-                        .autocorrectionDisabled()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Issue Summary")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("Describe the problem", text: $issue)
+                            .textInputAutocapitalization(.sentences)
+                            .autocorrectionDisabled()
+                    }
                     if hearingAids.isEmpty == false {
                         Picker("Hearing Aid", selection: $selectedHearingAidId) {
                             ForEach(hearingAids) { aid in
@@ -357,8 +504,13 @@ struct AddIssueLogSheet: View {
                 }
 
                 Section("Note") {
-                    TextField("Optional note", text: $note, axis: .vertical)
-                        .lineLimit(1...4)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Additional Notes (Optional)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("Add any extra details", text: $note, axis: .vertical)
+                            .lineLimit(1...4)
+                    }
                 }
             }
             .navigationTitle(title)
@@ -396,6 +548,64 @@ struct AddIssueLogSheet: View {
                 selectedHearingAidId = preselectedHearingAidId
             }
             .errorAlert(title: "Unable to Save Issue", message: $errorMessage)
+        }
+    }
+}
+
+private struct ResolveIssueSheet: View {
+    @State private var resolvedAt: Date = Date()
+    @State private var resolutionNote: String = ""
+    @State private var errorMessage: String?
+
+    let issue: IssueLog
+    let onSave: (Date, String) throws -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Issue") {
+                    Text(issue.issue)
+                        .font(.headline)
+                    Text(issue.hearingAid?.name ?? "Unknown Aid")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("Resolution") {
+                    DatePicker(
+                        "Resolved At",
+                        selection: $resolvedAt,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Resolution Note (Optional)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("What was done to resolve it?", text: $resolutionNote, axis: .vertical)
+                            .lineLimit(2...5)
+                    }
+                }
+            }
+            .navigationTitle("Resolve Issue")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        do {
+                            try onSave(resolvedAt, resolutionNote)
+                        } catch {
+                            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Could not resolve issue."
+                        }
+                    }
+                }
+            }
+            .errorAlert(title: "Unable to Resolve Issue", message: $errorMessage)
         }
     }
 }

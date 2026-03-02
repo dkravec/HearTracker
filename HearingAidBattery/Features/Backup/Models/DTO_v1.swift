@@ -30,6 +30,8 @@ struct BatteryPackDTO_v1: Codable {
     let numberOfPacks: Int
     let quantityPurchased: Int
     let quantityRemaining: Int
+    let isDone: Bool?
+    let isMarkedLost: Bool?
     let priceAmount: Decimal?
     let currencyCode: String?
     let brand: String?
@@ -45,6 +47,9 @@ struct IssueLogDTO_v1: Codable {
     let severity: Int?
     let note: String?
     let linkedBatteryLogId: UUID?
+    let isResolved: Bool?
+    let resolvedAt: Date?
+    let resolutionNote: String?
 }
 
 struct SettingsDTO_v1: Codable {

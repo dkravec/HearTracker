@@ -303,7 +303,7 @@ struct HearingAidDetailView: View {
     }
 
     private var availablePacks: [BatteryPack] {
-        packs.filter { $0.quantityRemaining > 0 }
+        packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
 }

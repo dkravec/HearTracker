@@ -16,19 +16,30 @@ final class IssueLog {
     var issue: String = ""
     var severity: Int?               // 1–5
     var note: String?
+    var isResolved: Bool = false
+    var resolvedAt: Date?
+    var resolutionNote: String?
 
     var hearingAid: HearingAid?
     var linkedBatteryLogId: UUID?    // optional link to “current” at time of issue
 
-    init(hearingAid: HearingAid,
-         timestamp: Date = Date(),
-         issue: String,
-         severity: Int? = nil,
-         note: String? = nil) {
+    init(
+        hearingAid: HearingAid,
+        timestamp: Date = Date(),
+        issue: String,
+        severity: Int? = nil,
+        note: String? = nil,
+        isResolved: Bool = false,
+        resolvedAt: Date? = nil,
+        resolutionNote: String? = nil
+    ) {
         self.hearingAid = hearingAid
         self.timestamp = timestamp
         self.issue = issue
         self.severity = severity
         self.note = note
+        self.isResolved = isResolved
+        self.resolvedAt = resolvedAt
+        self.resolutionNote = resolutionNote
     }
 }

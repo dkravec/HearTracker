@@ -151,6 +151,9 @@ struct BackupImportService {
             pack.createdAt = dto.createdAt
             pack.quantityPurchased = dto.quantityPurchased
             pack.quantityRemaining = dto.quantityRemaining
+            let isMarkedLost = dto.isMarkedLost ?? false
+            pack.isDone = (dto.isDone ?? false) || isMarkedLost
+            pack.isMarkedLost = isMarkedLost
             pack.retailer = dto.retailer
             pack.note = dto.note
             context.insert(pack)
@@ -196,6 +199,7 @@ struct BackupImportService {
         }
 
         for dto in models.issueLogs.items {
+            let isResolved = dto.isResolved ?? false
             let aidId = try requireReference(
                 dto.hearingAidId,
                 model: "issueLogs",
@@ -214,7 +218,10 @@ struct BackupImportService {
                 timestamp: dto.timestamp,
                 issue: dto.issue,
                 severity: dto.severity,
-                note: dto.note
+                note: dto.note,
+                isResolved: isResolved,
+                resolvedAt: isResolved ? dto.resolvedAt : nil,
+                resolutionNote: isResolved ? dto.resolutionNote : nil
             )
             issue.id = dto.id
             if let linkedBatteryLogId = dto.linkedBatteryLogId {

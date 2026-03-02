@@ -66,6 +66,8 @@ struct BackupExportService {
             numberOfPacks: batteryPack.numberOfPacks,
             quantityPurchased: batteryPack.quantityPurchased,
             quantityRemaining: batteryPack.quantityRemaining,
+            isDone: batteryPack.isDone,
+            isMarkedLost: batteryPack.isMarkedLost,
             priceAmount: batteryPack.priceAmount,
             currencyCode: batteryPack.currencyCode,
             brand: batteryPack.brand,
@@ -82,7 +84,10 @@ struct BackupExportService {
             issue: issueLog.issue,
             severity: issueLog.severity,
             note: issueLog.note,
-            linkedBatteryLogId: issueLog.linkedBatteryLogId
+            linkedBatteryLogId: issueLog.linkedBatteryLogId,
+            isResolved: issueLog.isResolved,
+            resolvedAt: issueLog.resolvedAt,
+            resolutionNote: issueLog.resolutionNote
         )
     }
 

@@ -11,7 +11,6 @@ import SwiftData
 
 @MainActor
 final class HearingAidListViewModel: ObservableObject {
-    @Published var showsRetired: Bool = false
     @Published var showsLogSheet: Bool = false
     @Published var selectedLogAidId: UUID?
     @Published var logNote: String = ""

@@ -37,7 +37,6 @@ struct BatteryPackView: View {
     }
 }
 
-// TODO implement this view
 struct BatteryPackSectionView: View {
     @Environment(\.modelContext) private var context
 
@@ -56,17 +55,17 @@ struct BatteryPackSectionView: View {
         self.averageDuration = averageDuration
     }
 
+    private var activePacks: [BatteryPack] {
+        packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
+    }
+
+    private var doneOrEmptyPacks: [BatteryPack] {
+        packs.filter { $0.quantityRemaining == 0 || $0.isDone }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                SectionHeaderView(title: "Battery Packs")
-                Spacer(minLength: 8)
-                Button("Add Pack") {
-                    showsAddPackSheet = true
-                }
-                .buttonStyle(.borderedProminent)
-            }
-
+            SectionHeaderView(title: "Battery Packs")
             if packs.isEmpty {
                 CardRowContainer {
                     VStack(alignment: .leading, spacing: 10) {
@@ -75,33 +74,26 @@ struct BatteryPackSectionView: View {
                         Text("Add a battery pack to track inventory and cost.")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        Button("Add Pack") {
-                            showsAddPackSheet = true
-                        }
-                        .buttonStyle(.borderedProminent)
                     }
                 }
             } else {
-                ForEach(packs) { pack in
-                    NavigableCardRow {
-                        BatteryPackDetailView(
-                            pack: pack,
-                            existingPacks: packs,
-                            averageDuration: averageDuration
-                        )
-                    } content: {
-                        BatteryPackCardBody(pack: pack)
+                if activePacks.isEmpty {
+                    CardRowContainer {
+                        Text("No active packs. Done/empty packs are shown below.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                     }
-                    .contextMenu {
-                        Button("Edit Pack") {
-                            packPendingEdit = pack
-                        }
-                        Button("Use Batteries…") {
-                            packPendingUsage = pack
-                        }
-                        Button("Delete Pack", role: .destructive) {
-                            packPendingDelete = pack
-                        }
+                } else {
+                    ForEach(activePacks) { pack in
+                        packRow(for: pack)
+                    }
+                }
+
+                if doneOrEmptyPacks.isEmpty == false {
+                    SectionHeaderView(title: "Done / Empty Packs")
+                        .padding(.top, 4)
+                    ForEach(doneOrEmptyPacks) { pack in
+                        packRow(for: pack)
                     }
                 }
             }
@@ -125,6 +117,15 @@ struct BatteryPackSectionView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                }
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                    showsAddPackSheet = true
+                } label: {
+                    Label("Add Pack", systemImage: "plus")
                 }
             }
         }
@@ -222,6 +223,58 @@ struct BatteryPackSectionView: View {
         )
     }
 
+    @ViewBuilder
+    private func packRow(for pack: BatteryPack) -> some View {
+        NavigableCardRow {
+            BatteryPackDetailView(
+                pack: pack,
+                existingPacks: packs,
+                averageDuration: averageDuration
+            )
+        } content: {
+            BatteryPackCardBody(pack: pack)
+        }
+        .contextMenu {
+            Button("Edit Pack") {
+                packPendingEdit = pack
+            }
+            if pack.isDone {
+                Button("Mark as Active") {
+                    markPackAsActive(pack)
+                }
+            } else {
+                Button("Use Batteries…") {
+                    packPendingUsage = pack
+                }
+                Button("Mark Done (Empty)") {
+                    markPackDone(pack, markLost: false)
+                }
+                Button("Mark Lost") {
+                    markPackDone(pack, markLost: true)
+                }
+            }
+            Button("Delete Pack", role: .destructive) {
+                packPendingDelete = pack
+            }
+        }
+    }
+
+    private func markPackDone(_ pack: BatteryPack, markLost: Bool) {
+        do {
+            try batteryPackService.markPackDone(pack, markLost: markLost, context: context)
+        } catch {
+            errorMessage = markLost ? "Could not mark pack as lost." : "Could not mark pack as done."
+        }
+    }
+
+    private func markPackAsActive(_ pack: BatteryPack) {
+        do {
+            try batteryPackService.unmarkPackDone(pack, context: context)
+        } catch {
+            errorMessage = "Could not mark pack as active."
+        }
+    }
+
 }
 
 struct AddBatteryPackSheet: View {
@@ -310,8 +363,11 @@ struct AddBatteryPackSheet: View {
     private var formContent: some View {
         Form {
             Section("Pack") {
-                HStack(spacing: 8) {
-                    TextField("Battery type (e.g. 312)", text: $batteryType)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Battery Type")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("e.g. 312", text: $batteryType)
                     if batteryTypeSuggestions.isEmpty == false {
                         Menu("Type") {
                             ForEach(batteryTypeSuggestions, id: \.self) { suggestion in
@@ -320,8 +376,11 @@ struct AddBatteryPackSheet: View {
                         }
                     }
                 }
-                HStack(spacing: 8) {
-                    TextField("Company / brand", text: $brand)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Brand")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Company or brand name", text: $brand)
                     if brandSuggestions.isEmpty == false {
                         Menu("Brand") {
                             ForEach(brandSuggestions, id: \.self) { suggestion in
@@ -341,8 +400,11 @@ struct AddBatteryPackSheet: View {
             }
 
             Section("Optional Price") {
-                HStack(spacing: 8) {
-                    TextField("Price amount", text: $priceText)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Price Amount")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("e.g. 12.99", text: $priceText)
                         .keyboardType(.decimalPad)
                     if priceSuggestions.isEmpty == false {
                         Menu("Price") {
@@ -359,9 +421,14 @@ struct AddBatteryPackSheet: View {
                     Text("Other…").tag(Self.otherSentinel)
                 }
                 if currencyCode == Self.otherSentinel {
-                    TextField("Currency code (e.g. ZAR)", text: $customCurrencyCode)
-                        .textInputAutocapitalization(.characters)
-                        .autocorrectionDisabled()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Custom Currency Code")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("e.g. ZAR", text: $customCurrencyCode)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                    }
                 }
             }
         }
@@ -476,6 +543,12 @@ struct BatteryPackCardBody: View {
                     .foregroundStyle(.secondary)
             }
 
+            if pack.isDone {
+                Text(pack.isMarkedLost ? "Marked done (lost)" : "Marked done (empty)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(pack.isMarkedLost ? .orange : .secondary)
+            }
+
             if let brand = pack.brand, brand.isEmpty == false {
                 Text("Brand: \(brand)")
                     .font(.subheadline)
@@ -543,40 +616,67 @@ struct BatteryPackDetailView: View {
 
                 CardRowContainer {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Use Batteries")
+                        Text(pack.isDone ? "Pack Status" : "Use Batteries")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
-                        HStack(spacing: 12) {
-                            Button {
-                                do {
-                                    try batteryPackService.restoreOneBattery(in: pack, context: context)
-                                } catch {
-                                    errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        if pack.isDone == false {
+                            HStack(spacing: 12) {
+                                Button {
+                                    do {
+                                        try batteryPackService.restoreOneBattery(in: pack, context: context)
+                                    } catch {
+                                        errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                                    }
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.headline)
+                                        .frame(width: 34, height: 34)
                                 }
-                            } label: {
-                                Image(systemName: "minus")
-                                    .font(.headline)
-                                    .frame(width: 34, height: 34)
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled(pack.quantityRemaining >= pack.quantityPurchased)
+                                .buttonStyle(.bordered)
+                                .disabled(pack.quantityRemaining >= pack.quantityPurchased)
 
-                            Text("\(pack.quantityRemaining) remaining")
-                                .font(.subheadline.weight(.semibold))
+                                Text("\(pack.quantityRemaining) remaining")
+                                    .font(.subheadline.weight(.semibold))
 
-                            Button {
-                                do {
-                                    try batteryPackService.useBatteries(1, from: pack, context: context)
-                                } catch {
-                                    errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                                Button {
+                                    do {
+                                        try batteryPackService.useBatteries(1, from: pack, context: context)
+                                    } catch {
+                                        errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                                    }
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.headline)
+                                        .frame(width: 34, height: 34)
                                 }
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.headline)
-                                    .frame(width: 34, height: 34)
+                                .buttonStyle(.borderedProminent)
+                                .disabled(pack.quantityRemaining <= 0)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(pack.quantityRemaining <= 0)
+                        }
+
+                        if pack.isDone {
+                            HStack(spacing: 8) {
+                                Text(pack.isMarkedLost ? "This pack is marked lost." : "This pack is marked done.")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                Spacer(minLength: 8)
+                                Button("Mark Active") {
+                                    markPackAsActive()
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        } else {
+                            HStack(spacing: 8) {
+                                Button("Mark Done (Empty)") {
+                                    markPackDone(markLost: false)
+                                }
+                                .buttonStyle(.bordered)
+
+                                Button("Mark Lost") {
+                                    markPackDone(markLost: true)
+                                }
+                                .buttonStyle(.bordered)
+                            }
                         }
 
                         Button("Delete Pack", role: .destructive) {
@@ -624,6 +724,22 @@ struct BatteryPackDetailView: View {
             Text("This action cannot be undone.")
         }
         .errorAlert(title: "Unable to Complete Action", message: $errorMessage)
+    }
+
+    private func markPackDone(markLost: Bool) {
+        do {
+            try batteryPackService.markPackDone(pack, markLost: markLost, context: context)
+        } catch {
+            errorMessage = markLost ? "Could not mark pack as lost." : "Could not mark pack as done."
+        }
+    }
+
+    private func markPackAsActive() {
+        do {
+            try batteryPackService.unmarkPackDone(pack, context: context)
+        } catch {
+            errorMessage = "Could not mark pack as active."
+        }
     }
 }
 
@@ -707,8 +823,13 @@ struct UseBatteriesSheet: View {
                         selection: $timestamp,
                         displayedComponents: [.date, .hourAndMinute]
                     )
-                    TextField("Optional note", text: $note, axis: .vertical)
-                        .lineLimit(1...3)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Note (Optional)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField("Add context for this usage", text: $note, axis: .vertical)
+                            .lineLimit(1...3)
+                    }
                 }
             }
             .navigationTitle("Use Batteries")
@@ -723,7 +844,7 @@ struct UseBatteriesSheet: View {
                         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
                         onSave(countUsed, trimmedNote.isEmpty ? nil : trimmedNote, timestamp)
                     }
-                    .disabled(pack.quantityRemaining <= 0)
+                    .disabled(pack.quantityRemaining <= 0 || pack.isDone)
                 }
             }
         }

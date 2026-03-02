@@ -28,8 +28,8 @@ struct HearingAidListView: View {
         viewModel.activeAids(from: hearingAids)
     }
 
-    private var retiredAids: [HearingAid] {
-        viewModel.retiredAids(from: hearingAids)
+    private var activePacks: [BatteryPack] {
+        packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
     var body: some View {
@@ -83,6 +83,19 @@ struct HearingAidListView: View {
                             }
                         }
 
+                        NavigationLink {
+                            HearingAidSectionView()
+                        } label: {
+                            HStack(spacing: 6) {
+                                SectionHeaderView(title: "Hearing Aids")
+                                Image(systemName: "chevron.right")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.top, 8)
+                        }
+                        .buttonStyle(.plain)
+
                         if activeAids.isEmpty {
                             EmptyStateView(
                                 title: "No Hearing Aids",
@@ -90,14 +103,20 @@ struct HearingAidListView: View {
                                 message: "Add a hearing aid to start tracking battery changes."
                             )
                         } else {
-                            SectionHeaderView(title: "Hearing Aids")
-                        }
+                            ForEach(Array(activeAids.prefix(2))) { aid in
+                                HearingAidCardRow(
+                                    aid: aid,
+                                    onLogTapped: { viewModel.beginLog(for: aid) }
+                                )
+                            }
 
-                        ForEach(activeAids) { aid in
-                            HearingAidCardRow(
-                                aid: aid,
-                                onLogTapped: { viewModel.beginLog(for: aid) }
-                            )
+                            if activeAids.count > 2 {
+                                CardRowContainer {
+                                    Text("Showing 2 of \(activeAids.count) hearing aids. Open Hearing Aids for the full list.")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                         }
 
                         NavigationLink {
@@ -113,14 +132,14 @@ struct HearingAidListView: View {
                         }
                         .buttonStyle(.plain)
 
-                        if packs.isEmpty {
+                        if activePacks.isEmpty {
                             EmptyStateView(
-                                title: "No Battery Packs",
+                                title: "No Active Battery Packs",
                                 systemImage: FeatureSymbols.batteryPack,
                                 message: "Add a battery pack to track inventory and cost."
                             )
                         } else {
-                            ForEach(packs) { pack in
+                            ForEach(activePacks) { pack in
                                 NavigableCardRow {
                                     BatteryPackDetailView(
                                         pack: pack,
@@ -171,25 +190,6 @@ struct HearingAidListView: View {
                             }
                         }
 
-                        if viewModel.showsRetired, !retiredAids.isEmpty {
-                            SectionHeaderView(title: "Retired")
-                                .padding(.top, 8)
-
-                            ForEach(retiredAids) { aid in
-                                HearingAidCardRow(
-                                    aid: aid,
-                                    onLogTapped: { viewModel.beginLog(for: aid) }
-                                )
-                            }
-                        }
-
-                        if retiredAids.isEmpty == false {
-                            CardRowContainer {
-                                Toggle("Show Retired Hearing Aids", isOn: $viewModel.showsRetired)
-                                    .font(.subheadline)
-                            }
-                            .padding(.top, 8)
-                        }
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
@@ -197,9 +197,6 @@ struct HearingAidListView: View {
                 .background(Color.clear)
             }
             .navigationTitle("HearTracker")
-            .navigationDestination(for: HearingAid.self) { aid in
-                HearingAidDetailView(aid: aid)
-            }
             .navigationDestination(for: BatteryLogRoute.self) { route in
                 BatteryLogDetailContainer(route: route)
             }
@@ -226,7 +223,7 @@ struct HearingAidListView: View {
         .sheet(isPresented: $showsAddActions) {
             AddEntryChoiceSheet(
                 activeAids: activeAids,
-                availablePacks: availablePacks,
+                availablePacks: activePacks,
                 packs: Array(packs),
                 defaultAidId: viewModel.aidNextToDie(from: activeAids, context: context)?.id ?? activeAids.first?.id,
                 onSaveBatteryLog: { aid, timestamp, note, packId in
@@ -256,7 +253,7 @@ struct HearingAidListView: View {
                     note: $viewModel.logNote,
                     timestamp: $viewModel.logTimestamp,
                     selectedPackId: $viewModel.selectedPackId,
-                    availablePacks: availablePacks,
+                    availablePacks: activePacks,
                     onSave: { timestamp, note in
                         if let currentAid = viewModel.resolvedAid(from: hearingAids) {
                             viewModel.saveLog(for: currentAid, timestamp: timestamp, note: note, context: context)
@@ -276,7 +273,11 @@ struct HearingAidListView: View {
         .alert("Delete Battery Pack?", isPresented: deletePackAlertBinding) {
             Button("Delete", role: .destructive) {
                 if let packPendingDelete {
-                    try? batteryPackService.deletePack(packPendingDelete, context: context)
+                    do {
+                        try batteryPackService.deletePack(packPendingDelete, context: context)
+                    } catch {
+                        viewModel.errorMessage = "Could not delete battery pack."
+                    }
                 }
                 packPendingDelete = nil
             }
@@ -300,14 +301,10 @@ struct HearingAidListView: View {
         )
     }
 
-    private var availablePacks: [BatteryPack] {
-        packs.filter { $0.quantityRemaining > 0 }
-    }
-
     private var activeIssues: [IssueLog] {
         issues.filter { issue in
             guard let aid = issue.hearingAid else { return false }
-            return aid.retired == false
+            return aid.retired == false && issue.isResolved == false
         }
     }
 
@@ -406,48 +403,6 @@ private struct HomeBatteryStatsCard: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.white.opacity(0.08))
         )
-    }
-}
-
-private struct HearingAidCardRow: View {
-    let aid: HearingAid
-    let onLogTapped: () -> Void
-
-    var body: some View {
-        NavigationLink(value: aid) {
-            CardRowContainer {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(aid.name)
-                            .font(.headline)
-
-                        if let model = aid.model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {
-                            Text(model)
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        if let batteryType = aid.batteryType?.trimmingCharacters(in: .whitespacesAndNewlines), !batteryType.isEmpty {
-                            Text("Type \(batteryType)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text("\((aid.logs ?? []).count) changes")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Button("Log") {
-                        onLogTapped()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("Log battery change for \(aid.name)")
-                }
-            }
-        }
-        .buttonStyle(.plain)
     }
 }
 
