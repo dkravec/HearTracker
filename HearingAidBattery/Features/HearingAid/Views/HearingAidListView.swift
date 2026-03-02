@@ -315,6 +315,7 @@ struct HearingAidListView: View {
         packs.first(where: { $0.currencyCode != nil })?.currencyCode?.uppercased()
             ?? CurrencyFormatter.localeCurrencyCode
     }
+
 }
 
 private struct HomeBatteryStatsCard: View {

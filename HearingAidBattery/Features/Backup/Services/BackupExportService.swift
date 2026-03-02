@@ -38,7 +38,8 @@ struct BackupExportService {
             name: hearingAid.name,
             model: hearingAid.model,
             batteryType: hearingAid.batteryType,
-            retired: hearingAid.retired
+            retired: hearingAid.retired,
+            notificationsEnabled: hearingAid.notificationsEnabled
         )
     }
 
@@ -90,6 +91,10 @@ struct BackupExportService {
             id: notification.id,
             createdAt: notification.createdAt,
             isEnabled: notification.isEnabled,
+            isExpectedDeathWarningEnabled: notification.isExpectedDeathWarningEnabled,
+            expectedDeathWarningHours: notification.expectedDeathWarningHours,
+            expectedDeathWarningMinutes: notification.expectedDeathWarningMinutes,
+            isMorningHeadsUpEnabled: notification.isMorningHeadsUpEnabled,
             morningHour: notification.morningHour,
             morningMinute: notification.morningMinute
         )

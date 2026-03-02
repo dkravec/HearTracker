@@ -41,12 +41,20 @@ final class NotificationService {
 
     func saveSettings(
         isEnabled: Bool,
+        isExpectedDeathWarningEnabled: Bool,
+        expectedDeathWarningHours: Int,
+        expectedDeathWarningMinutes: Int,
+        isMorningHeadsUpEnabled: Bool,
         morningHour: Int,
         morningMinute: Int,
         context: ModelContext
     ) {
         let settings = loadOrCreateSettings(context: context)
         settings.isEnabled = isEnabled
+        settings.isExpectedDeathWarningEnabled = isExpectedDeathWarningEnabled
+        settings.expectedDeathWarningHours = min(max(expectedDeathWarningHours, 0), 48)
+        settings.expectedDeathWarningMinutes = min(max(expectedDeathWarningMinutes, 0), 59)
+        settings.isMorningHeadsUpEnabled = isMorningHeadsUpEnabled
         settings.morningHour = min(max(morningHour, 0), 23)
         settings.morningMinute = min(max(morningMinute, 0), 59)
         try? context.save()
@@ -96,22 +104,25 @@ final class NotificationService {
         ))?.first else {
             return
         }
+        guard hearingAid.notificationsEnabled else { return }
 
-        let oneHourWarningDate = predictedDeath.addingTimeInterval(-3600)
-        if oneHourWarningDate > now {
+        let leadSeconds = TimeInterval((settings.expectedDeathWarningHours * 3600) + (settings.expectedDeathWarningMinutes * 60))
+        let warningDate = predictedDeath.addingTimeInterval(-leadSeconds)
+        if settings.isExpectedDeathWarningEnabled, leadSeconds > 0, warningDate > now {
             let content = UNMutableNotificationContent()
             content.title = "\(hearingAid.name) battery warning"
-            content.body = "Estimated to die in about 1 hour."
+            content.body = "Estimated to die in about \(leadTimeText(hours: settings.expectedDeathWarningHours, minutes: settings.expectedDeathWarningMinutes))."
             content.sound = .default
             await schedule(
-                identifier: oneHourRequestId(for: hearingAidId),
+                identifier: leadWarningRequestId(for: hearingAidId),
                 content: content,
-                triggerDate: oneHourWarningDate
+                triggerDate: warningDate
             )
         }
 
         let withinNextDay = predictedDeath <= now.addingTimeInterval(24 * 3600)
-        if withinNextDay,
+        if settings.isMorningHeadsUpEnabled,
+           withinNextDay,
            let morningDate = nextMorningDate(hour: settings.morningHour, minute: settings.morningMinute, now: now),
            morningDate > now,
            morningDate <= predictedDeath {
@@ -129,7 +140,11 @@ final class NotificationService {
 
     private func cancelPendingRequests(for hearingAidId: UUID) {
         notificationCenter.removePendingNotificationRequests(
-            withIdentifiers: [morningRequestId(for: hearingAidId), oneHourRequestId(for: hearingAidId)]
+            withIdentifiers: [
+                morningRequestId(for: hearingAidId),
+                leadWarningRequestId(for: hearingAidId),
+                legacyOneHourRequestId(for: hearingAidId),
+            ]
         )
     }
 
@@ -152,8 +167,23 @@ final class NotificationService {
         "notif.morning.\(hearingAidId.uuidString)"
     }
 
-    private func oneHourRequestId(for hearingAidId: UUID) -> String {
+    private func leadWarningRequestId(for hearingAidId: UUID) -> String {
+        "notif.leadwarning.\(hearingAidId.uuidString)"
+    }
+
+    private func legacyOneHourRequestId(for hearingAidId: UUID) -> String {
         "notif.onehour.\(hearingAidId.uuidString)"
+    }
+
+    private func leadTimeText(hours: Int, minutes: Int) -> String {
+        switch (hours, minutes) {
+        case (0, let m):
+            return "\(m) minute\(m == 1 ? "" : "s")"
+        case (let h, 0):
+            return "\(h) hour\(h == 1 ? "" : "s")"
+        case (let h, let m):
+            return "\(h) hour\(h == 1 ? "" : "s") \(m) minute\(m == 1 ? "" : "s")"
+        }
     }
 
     private func nextMorningDate(hour: Int, minute: Int, now: Date) -> Date? {

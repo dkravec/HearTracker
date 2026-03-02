@@ -73,10 +73,13 @@ final class IssueLogService {
         }()
         guard let targetAid else { return }
 
-        let currentLogId = (targetAid.logs ?? [])
-            .sorted { $0.timestamp > $1.timestamp }
-            .first?
-            .id
+        let targetAidId = targetAid.id
+        var descriptor = FetchDescriptor<BatteryLog>(
+            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == targetAidId },
+            sortBy: [SortDescriptor(\BatteryLog.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        let currentLogId = (try? context.fetch(descriptor))?.first?.id
 
         try? createIssueLog(
             for: targetAid,

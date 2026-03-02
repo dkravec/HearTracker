@@ -124,7 +124,13 @@ struct BackupImportService {
         for item in currentAids { context.delete(item) }
 
         let aidsById = try makeDictionary(items: models.hearingAids.items, modelName: "hearingAids") { dto in
-            let aid = HearingAid(name: dto.name, model: dto.model, batteryType: dto.batteryType, retired: dto.retired)
+            let aid = HearingAid(
+                name: dto.name,
+                model: dto.model,
+                batteryType: dto.batteryType,
+                retired: dto.retired,
+                notificationsEnabled: dto.notificationsEnabled ?? true
+            )
             aid.id = dto.id
             aid.createdAt = dto.createdAt
             context.insert(aid)
@@ -241,6 +247,10 @@ struct BackupImportService {
         for dto in models.notifications.items {
             let notification = NotificationModel(
                 isEnabled: dto.isEnabled,
+                isExpectedDeathWarningEnabled: dto.isExpectedDeathWarningEnabled ?? true,
+                expectedDeathWarningHours: dto.expectedDeathWarningHours ?? 1,
+                expectedDeathWarningMinutes: dto.expectedDeathWarningMinutes ?? 0,
+                isMorningHeadsUpEnabled: dto.isMorningHeadsUpEnabled ?? true,
                 morningHour: dto.morningHour,
                 morningMinute: dto.morningMinute
             )

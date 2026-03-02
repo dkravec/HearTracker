@@ -12,7 +12,6 @@ import UniformTypeIdentifiers
 struct SettingView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
-    @Query(sort: \NotificationModel.createdAt, order: .forward) private var notificationModels: [NotificationModel]
 
     @State private var showsDeleteAllDataAlert: Bool = false
     @State private var showsDeleteLogsSheet: Bool = false
@@ -28,9 +27,6 @@ struct SettingView: View {
     @State private var exportDocument: BackupJSONDocument?
     @State private var exportFilename: String = "HearTracker_Backup_v1"
     @State private var resultMessage: String?
-    @State private var notificationsEnabled: Bool = false
-    @State private var morningTime: Date = Date()
-    @State private var hasLoadedNotificationSettings: Bool = false
 
     private let settingService = SettingService()
     private let notificationService = NotificationService()
@@ -42,16 +38,28 @@ struct SettingView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 SectionHeaderView(title: "General")
                 CardRowContainer {
-                    NavigationLink {
-                        AboutView()
-                    } label: {
-                        settingsRowLabel(
-                            title: "About",
-                            subtitle: "Version, build, website",
-                            systemImage: "info.circle.fill"
-                        )
+                    VStack(alignment: .leading, spacing: 12) {
+                        settingsNavigationRow(
+                            title: "Notifications",
+                            subtitle: "General, alerts, and per-device toggles",
+                            systemImage: "bell.badge.fill"
+                        ) {
+                            HearingAidNotificationSettingsView()
+                        }
+
+                        Divider()
+
+                        NavigationLink {
+                            AboutView()
+                        } label: {
+                            settingsRowLabel(
+                                title: "About",
+                                subtitle: "Version, build, website",
+                                systemImage: "info.circle.fill"
+                            )
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
 
                 SectionHeaderView(title: "Data")
@@ -87,26 +95,6 @@ struct SettingView: View {
                     }
                 }
 
-                SectionHeaderView(title: "Notifications")
-                CardRowContainer {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Toggle(isOn: $notificationsEnabled) {
-                            Label("Enable Notifications", systemImage: "bell.badge.fill")
-                                .font(.headline)
-                        }
-
-                        Divider()
-
-                        DatePicker(
-                            "Morning Heads-Up Time",
-                            selection: $morningTime,
-                            displayedComponents: .hourAndMinute
-                        )
-                        .disabled(notificationsEnabled == false)
-                        .opacity(notificationsEnabled ? 1.0 : 0.55)
-                    }
-                }
-
                 SectionHeaderView(title: "Danger Zone")
                 CardRowContainer {
                     VStack(alignment: .leading, spacing: 12) {
@@ -134,15 +122,6 @@ struct SettingView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .appBackground()
-        .onAppear {
-            loadNotificationSettings()
-        }
-        .onChange(of: notificationsEnabled) {
-            persistNotificationSettingsAfterToggle()
-        }
-        .onChange(of: morningTime) {
-            persistNotificationSettings()
-        }
         .alert("Delete All Data?", isPresented: $showsDeleteAllDataAlert) {
             Button("Delete", role: .destructive) {
                 do {
@@ -313,48 +292,6 @@ struct SettingView: View {
         }
     }
 
-    private func loadNotificationSettings() {
-        let settings = notificationModels.first ?? notificationService.loadOrCreateSettings(context: context)
-        notificationsEnabled = settings.isEnabled
-
-        var components = DateComponents()
-        components.hour = settings.morningHour
-        components.minute = settings.morningMinute
-        morningTime = Calendar.current.date(from: components) ?? Date()
-        hasLoadedNotificationSettings = true
-    }
-
-    private func persistNotificationSettingsAfterToggle() {
-        guard hasLoadedNotificationSettings else { return }
-        if notificationsEnabled == false {
-            persistNotificationSettings()
-            return
-        }
-
-        Task {
-            let granted = await notificationService.requestPermissionIfNeeded()
-            guard granted else {
-                notificationsEnabled = false
-                persistNotificationSettings()
-                resultMessage = "Notifications are disabled. Enable them in iOS Settings to use reminders."
-                return
-            }
-            persistNotificationSettings()
-        }
-    }
-
-    private func persistNotificationSettings() {
-        guard hasLoadedNotificationSettings else { return }
-        let components = Calendar.current.dateComponents([.hour, .minute], from: morningTime)
-        notificationService.saveSettings(
-            isEnabled: notificationsEnabled,
-            morningHour: components.hour ?? 8,
-            morningMinute: components.minute ?? 0,
-            context: context
-        )
-        rescheduleNotifications()
-    }
-
     private var deleteLogsAlertMessage: String {
         if let id = pendingDeleteLogsAidId, let aid = hearingAids.first(where: { $0.id == id }) {
             return "This only deletes battery logs for \(aid.name)."
@@ -511,6 +448,214 @@ struct SettingView: View {
             settingsRowLabel(title: title, subtitle: subtitle, systemImage: systemImage)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct HearingAidNotificationSettingsView: View {
+    @Environment(\.modelContext) private var context
+    @Query(sort: \NotificationModel.createdAt, order: .forward) private var notificationModels: [NotificationModel]
+    @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
+
+    @State private var notificationsEnabled: Bool = false
+    @State private var expectedDeathWarningEnabled: Bool = true
+    @State private var expectedDeathWarningHours: Int = 1
+    @State private var expectedDeathWarningMinutes: Int = 0
+    @State private var morningHeadsUpEnabled: Bool = true
+    @State private var morningTime: Date = Date()
+    @State private var hasLoadedSettings: Bool = false
+
+    private let notificationService = NotificationService()
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                SectionHeaderView(title: "General")
+                CardRowContainer {
+                    Toggle(isOn: $notificationsEnabled) {
+                        Label("Enable Notifications", systemImage: "bell.badge.fill")
+                            .font(.headline)
+                    }
+                }
+
+                if notificationsEnabled {
+                    SectionHeaderView(title: "Alerts")
+                    CardRowContainer {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Toggle(isOn: $expectedDeathWarningEnabled) {
+                                Label("Expected Death Warning", systemImage: "clock.badge.exclamationmark.fill")
+                                    .font(.headline)
+                            }
+
+                            if expectedDeathWarningEnabled {
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Hours")
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                        Picker("Hours", selection: $expectedDeathWarningHours) {
+                                            ForEach(0..<49, id: \.self) { hour in
+                                                Text("\(hour)").tag(hour)
+                                            }
+                                        }
+                                        .pickerStyle(.wheel)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 120)
+                                        .clipped()
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Minutes")
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                        Picker("Minutes", selection: $expectedDeathWarningMinutes) {
+                                            ForEach(0..<60, id: \.self) { minute in
+                                                Text("\(minute)").tag(minute)
+                                            }
+                                        }
+                                        .pickerStyle(.wheel)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 120)
+                                        .clipped()
+                                    }
+                                }
+                            }
+
+                            Divider()
+
+                            Toggle(isOn: $morningHeadsUpEnabled) {
+                                Label("Morning Heads-Up", systemImage: "sun.max.fill")
+                                    .font(.headline)
+                            }
+
+                            if morningHeadsUpEnabled {
+                                DatePicker(
+                                    "Morning Heads-Up Time",
+                                    selection: $morningTime,
+                                    displayedComponents: .hourAndMinute
+                                )
+                            }
+                        }
+                    }
+
+                    SectionHeaderView(title: "Per Hearing Aid")
+                    if activeAids.isEmpty {
+                        EmptyStateView(
+                            title: "No Hearing Aids",
+                            systemImage: FeatureSymbols.hearingAid,
+                            message: "Add a hearing aid to configure notification preferences."
+                        )
+                    } else {
+                        CardRowContainer {
+                            VStack(alignment: .leading, spacing: 12) {
+                                ForEach(activeAids) { aid in
+                                    Toggle(isOn: binding(for: aid)) {
+                                        Text(aid.name)
+                                            .font(.headline)
+                                    }
+
+                                    if aid.id != activeAids.last?.id {
+                                        Divider()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        .navigationTitle("Notification Preferences")
+        .navigationBarTitleDisplayMode(.inline)
+        .appBackground()
+        .onAppear {
+            loadSettings()
+        }
+        .onChange(of: notificationsEnabled) {
+            persistGeneralNotificationToggle()
+        }
+        .onChange(of: expectedDeathWarningEnabled) {
+            persistNotificationSettings()
+        }
+        .onChange(of: expectedDeathWarningHours) {
+            persistNotificationSettings()
+        }
+        .onChange(of: expectedDeathWarningMinutes) {
+            persistNotificationSettings()
+        }
+        .onChange(of: morningHeadsUpEnabled) {
+            persistNotificationSettings()
+        }
+        .onChange(of: morningTime) {
+            persistNotificationSettings()
+        }
+    }
+
+    private var activeAids: [HearingAid] {
+        hearingAids.filter { !$0.retired }
+    }
+
+    private func loadSettings() {
+        let settings = notificationModels.first ?? notificationService.loadOrCreateSettings(context: context)
+        notificationsEnabled = settings.isEnabled
+        expectedDeathWarningEnabled = settings.isExpectedDeathWarningEnabled
+        expectedDeathWarningHours = settings.expectedDeathWarningHours
+        expectedDeathWarningMinutes = settings.expectedDeathWarningMinutes
+        morningHeadsUpEnabled = settings.isMorningHeadsUpEnabled
+        var components = DateComponents()
+        components.hour = settings.morningHour
+        components.minute = settings.morningMinute
+        morningTime = Calendar.current.date(from: components) ?? Date()
+        hasLoadedSettings = true
+    }
+
+    private func persistGeneralNotificationToggle() {
+        guard hasLoadedSettings else { return }
+        if notificationsEnabled == false {
+            persistNotificationSettings()
+            return
+        }
+
+        Task {
+            let granted = await notificationService.requestPermissionIfNeeded()
+            guard granted else {
+                notificationsEnabled = false
+                persistNotificationSettings()
+                return
+            }
+            persistNotificationSettings()
+        }
+    }
+
+    private func persistNotificationSettings() {
+        guard hasLoadedSettings else { return }
+        let components = Calendar.current.dateComponents([.hour, .minute], from: morningTime)
+        notificationService.saveSettings(
+            isEnabled: notificationsEnabled,
+            isExpectedDeathWarningEnabled: expectedDeathWarningEnabled,
+            expectedDeathWarningHours: expectedDeathWarningHours,
+            expectedDeathWarningMinutes: expectedDeathWarningMinutes,
+            isMorningHeadsUpEnabled: morningHeadsUpEnabled,
+            morningHour: components.hour ?? 8,
+            morningMinute: components.minute ?? 0,
+            context: context
+        )
+        Task {
+            await notificationService.rescheduleAll(context: context)
+        }
+    }
+
+    private func binding(for hearingAid: HearingAid) -> Binding<Bool> {
+        Binding<Bool>(
+            get: { hearingAid.notificationsEnabled },
+            set: { isEnabled in
+                hearingAid.notificationsEnabled = isEnabled
+                try? context.save()
+                Task {
+                    await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+                }
+            }
+        )
     }
 }
 

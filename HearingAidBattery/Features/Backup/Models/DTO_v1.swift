@@ -7,6 +7,7 @@ struct HearingAidDTO_v1: Codable {
     let model: String?
     let batteryType: String?
     let retired: Bool
+    let notificationsEnabled: Bool?
 }
 
 struct BatteryLogDTO_v1: Codable {
@@ -55,6 +56,10 @@ struct NotificationDTO_v1: Codable {
     let id: UUID
     let createdAt: Date
     let isEnabled: Bool
+    let isExpectedDeathWarningEnabled: Bool?
+    let expectedDeathWarningHours: Int?
+    let expectedDeathWarningMinutes: Int?
+    let isMorningHeadsUpEnabled: Bool?
     let morningHour: Int
     let morningMinute: Int
 }
