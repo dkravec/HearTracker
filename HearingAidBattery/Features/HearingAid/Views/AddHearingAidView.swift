@@ -25,9 +25,34 @@ struct AddHearingAidView: View {
 
     var body: some View {
         Form {
-            TextField("Name", text: $name)
-            TextField("Model", text: $model)
-            TextField("Battery Type (e.g. 312)", text: $batteryType)
+            Section("Hearing Aid") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Name")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Enter hearing aid name", text: $name)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Model (Optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Enter model", text: $model)
+                        .textInputAutocapitalization(.words)
+                        .autocorrectionDisabled()
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Battery Type (Optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("e.g. 312", text: $batteryType)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                }
+            }
 
             Button("Create") {
                 do {

@@ -18,6 +18,10 @@ struct HearingAidDetailView: View {
 
     @StateObject private var viewModel = HearingAidDetailViewModel()
     @StateObject private var batteryStatusViewModel = BatteryStatusViewModel()
+    @State private var logErrorMessage: String?
+    @State private var selectedLogSelection: LogSelection?
+
+    private let batteryLogService: BatteryLogProviding = BatteryLogService()
     private static let durationFormatter = BatteryDurationFormatter()
     private static let statsWindowSize: Int = 10
 
@@ -82,7 +86,9 @@ struct HearingAidDetailView: View {
                 }
 
                 ForEach(Array(logs.enumerated()), id: \.element.id) { index, log in
-                    NavigationLink(value: BatteryLogRoute(logId: log.id, hearingAidId: aid.id)) {
+                    Button {
+                        selectedLogSelection = LogSelection(id: log.id)
+                    } label: {
                         BatteryLogRow(log: log, rowModel: rowModel(for: index), showsChevron: true)
                     }
                     .buttonStyle(.plain)
@@ -154,6 +160,41 @@ struct HearingAidDetailView: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
+        .sheet(item: $selectedLogSelection) { selection in
+            NavigationStack {
+                if let index = logs.firstIndex(where: { $0.id == selection.id }) {
+                    let log = logs[index]
+                    BatteryLogDetailView(
+                        log: log,
+                        rowModel: rowModel(for: index),
+                        onSave: { timestamp, note, excludeFromStats, excludePreviousGapFromStats in
+                            do {
+                                try batteryLogService.updateLog(
+                                    log,
+                                    timestamp: timestamp,
+                                    note: note,
+                                    excludeFromStats: excludeFromStats,
+                                    excludePreviousGapFromStats: excludePreviousGapFromStats,
+                                    context: context
+                                )
+                            } catch {
+                                logErrorMessage = "Could not save battery log changes."
+                            }
+                        },
+                        onDelete: {
+                            do {
+                                try batteryLogService.deleteLog(log, context: context)
+                            } catch {
+                                logErrorMessage = "Could not delete battery log."
+                            }
+                        }
+                    )
+                } else {
+                    ContentUnavailableView("Log Not Found", systemImage: "questionmark.circle")
+                }
+            }
+            .appBackground()
+        }
         .onAppear { viewModel.syncFromAid(aid) }
         .task(id: logsRefreshSignature) {
             _ = batteryStatusViewModel.refresh(
@@ -164,6 +205,7 @@ struct HearingAidDetailView: View {
         }
         .appBackground()
         .errorAlert(title: "Unable to Save", message: $viewModel.errorMessage)
+        .errorAlert(title: "Unable to Save Battery Log", message: $logErrorMessage)
     }
 
     private var statsSection: some View {
@@ -209,13 +251,19 @@ struct HearingAidDetailView: View {
                 Text("Edit Hearing Aid")
                     .font(.headline)
 
-                TextField(
-                    "Enter a new name",
-                    text: $viewModel.editName,
-                    prompt: Text(aid.name)
-                )
-                .textInputAutocapitalization(.words)
-                .autocorrectionDisabled()
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Name")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    TextField(
+                        "Enter hearing aid name",
+                        text: $viewModel.editName,
+                        prompt: Text(aid.name)
+                    )
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                }
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Model")
@@ -306,4 +354,8 @@ struct HearingAidDetailView: View {
         packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
+}
+
+private struct LogSelection: Identifiable {
+    let id: UUID
 }

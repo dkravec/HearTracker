@@ -88,8 +88,13 @@ struct BatteryLogSheet: View {
             }
 
             Section {
-                TextField("Add a note (optional)", text: $note, axis: .vertical)
-                    .lineLimit(1...3)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Note (Optional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Add context for this battery log", text: $note, axis: .vertical)
+                        .lineLimit(1...3)
+                }
             } header: {
                 Text("Battery Log")
             } footer: {
