@@ -135,7 +135,7 @@ struct BatteryPackSectionView: View {
                 title: "Add Battery Pack",
                 saveButtonTitle: "Save",
                 onSave: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
-                    try? batteryPackService.createBatteryPack(
+                    try batteryPackService.createBatteryPack(
                         batteryType: batteryType,
                         purchaseDate: purchaseDate,
                         batteriesPerPack: batteriesPerPack,
@@ -235,6 +235,7 @@ struct AddBatteryPackSheet: View {
     @State private var priceText: String = ""
     @State private var currencyCode: String = CurrencyFormatter.localeCurrencyCode
     @State private var customCurrencyCode: String = ""
+    @State private var errorMessage: String?
 
     private static let otherSentinel = "__OTHER__"
 
@@ -249,7 +250,7 @@ struct AddBatteryPackSheet: View {
     let initialNumberOfPacks: Int
     let initialPriceText: String
     let initialCurrencyCode: String
-    let onSave: (String, String?, Date, Int, Int, Decimal?, String?) -> Void
+    let onSave: (String, String?, Date, Int, Int, Decimal?, String?) throws -> Void
     let onCancel: () -> Void
     var wrapsInNavigationStack: Bool = true
 
@@ -265,7 +266,7 @@ struct AddBatteryPackSheet: View {
         initialNumberOfPacks: Int = 1,
         initialPriceText: String = "",
         initialCurrencyCode: String = CurrencyFormatter.localeCurrencyCode,
-        onSave: @escaping (String, String?, Date, Int, Int, Decimal?, String?) -> Void,
+        onSave: @escaping (String, String?, Date, Int, Int, Decimal?, String?) throws -> Void,
         onCancel: @escaping () -> Void,
         wrapsInNavigationStack: Bool = true
     ) {
@@ -373,20 +374,25 @@ struct AddBatteryPackSheet: View {
             }
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(saveButtonTitle) {
-                    onSave(
-                        batteryType.trimmingCharacters(in: .whitespacesAndNewlines),
-                        normalizedBrand,
-                        purchaseDate,
-                        batteriesPerPack,
-                        numberOfPacks,
-                        decimalValue(from: priceText),
-                        normalizedCurrencyCode
-                    )
-                    dismiss()
+                    do {
+                        try onSave(
+                            batteryType.trimmingCharacters(in: .whitespacesAndNewlines),
+                            normalizedBrand,
+                            purchaseDate,
+                            batteriesPerPack,
+                            numberOfPacks,
+                            decimalValue(from: priceText),
+                            normalizedCurrencyCode
+                        )
+                        dismiss()
+                    } catch {
+                        errorMessage = "Could not save battery pack."
+                    }
                 }
                 .disabled(batteryType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
+        .errorAlert(title: "Unable to Save Battery Pack", message: $errorMessage)
     }
 
     private var effectiveCurrencyCode: String {
@@ -644,23 +650,19 @@ private struct EditBatteryPackSheet: View {
             initialPriceText: pack.priceAmount.map { NSDecimalNumber(decimal: $0).stringValue } ?? "",
             initialCurrencyCode: pack.currencyCode ?? CurrencyFormatter.localeCurrencyCode,
             onSave: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
-                do {
-                    try batteryPackService.updatePack(
-                        pack,
-                        batteryType: batteryType,
-                        purchaseDate: purchaseDate,
-                        batteriesPerPack: batteriesPerPack,
-                        numberOfPacks: numberOfPacks,
-                        priceAmount: priceAmount,
-                        currencyCode: currencyCode,
-                        brand: brand,
-                        retailer: pack.retailer,
-                        note: pack.note,
-                        context: context
-                    )
-                } catch {
-                    errorMessage = "Could not save battery pack changes."
-                }
+                try batteryPackService.updatePack(
+                    pack,
+                    batteryType: batteryType,
+                    purchaseDate: purchaseDate,
+                    batteriesPerPack: batteriesPerPack,
+                    numberOfPacks: numberOfPacks,
+                    priceAmount: priceAmount,
+                    currencyCode: currencyCode,
+                    brand: brand,
+                    retailer: pack.retailer,
+                    note: pack.note,
+                    context: context
+                )
                 onClose()
             },
             onCancel: {

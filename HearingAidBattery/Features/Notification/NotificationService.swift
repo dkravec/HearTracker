@@ -50,10 +50,22 @@ final class NotificationService {
         context: ModelContext
     ) {
         let settings = loadOrCreateSettings(context: context)
+        let clampedWarningHours = min(max(expectedDeathWarningHours, 0), 48)
+        let clampedWarningMinutes = min(max(expectedDeathWarningMinutes, 0), 59)
+        let normalizedWarningHours: Int
+        let normalizedWarningMinutes: Int
+        if isExpectedDeathWarningEnabled, clampedWarningHours == 0, clampedWarningMinutes == 0 {
+            normalizedWarningHours = 1
+            normalizedWarningMinutes = 0
+        } else {
+            normalizedWarningHours = clampedWarningHours
+            normalizedWarningMinutes = clampedWarningMinutes
+        }
+
         settings.isEnabled = isEnabled
         settings.isExpectedDeathWarningEnabled = isExpectedDeathWarningEnabled
-        settings.expectedDeathWarningHours = min(max(expectedDeathWarningHours, 0), 48)
-        settings.expectedDeathWarningMinutes = min(max(expectedDeathWarningMinutes, 0), 59)
+        settings.expectedDeathWarningHours = normalizedWarningHours
+        settings.expectedDeathWarningMinutes = normalizedWarningMinutes
         settings.isMorningHeadsUpEnabled = isMorningHeadsUpEnabled
         settings.morningHour = min(max(morningHour, 0), 23)
         settings.morningMinute = min(max(morningMinute, 0), 59)
@@ -106,12 +118,24 @@ final class NotificationService {
         }
         guard hearingAid.notificationsEnabled else { return }
 
-        let leadSeconds = TimeInterval((settings.expectedDeathWarningHours * 3600) + (settings.expectedDeathWarningMinutes * 60))
+        let warningHours: Int
+        let warningMinutes: Int
+        if settings.isExpectedDeathWarningEnabled,
+           settings.expectedDeathWarningHours == 0,
+           settings.expectedDeathWarningMinutes == 0 {
+            warningHours = 1
+            warningMinutes = 0
+        } else {
+            warningHours = settings.expectedDeathWarningHours
+            warningMinutes = settings.expectedDeathWarningMinutes
+        }
+
+        let leadSeconds = TimeInterval((warningHours * 3600) + (warningMinutes * 60))
         let warningDate = predictedDeath.addingTimeInterval(-leadSeconds)
         if settings.isExpectedDeathWarningEnabled, leadSeconds > 0, warningDate > now {
             let content = UNMutableNotificationContent()
             content.title = "\(hearingAid.name) battery warning"
-            content.body = "Estimated to die in about \(leadTimeText(hours: settings.expectedDeathWarningHours, minutes: settings.expectedDeathWarningMinutes))."
+            content.body = "Estimated to die in about \(leadTimeText(hours: warningHours, minutes: warningMinutes))."
             content.sound = .default
             await schedule(
                 identifier: leadWarningRequestId(for: hearingAidId),

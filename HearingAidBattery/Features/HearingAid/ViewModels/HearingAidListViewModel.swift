@@ -18,6 +18,7 @@ final class HearingAidListViewModel: ObservableObject {
     @Published var logTimestamp: Date = Date()
     @Published var showsInventoryWarning: Bool = false
     @Published var selectedPackId: UUID?
+    @Published var errorMessage: String?
 
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
@@ -55,6 +56,7 @@ final class HearingAidListViewModel: ObservableObject {
 
     /// Opens the log sheet pre-selecting the given hearing aid.
     func beginLog(for hearingAid: HearingAid) {
+        errorMessage = nil
         logNote = ""
         logTimestamp = Date()
         selectedPackId = nil
@@ -71,18 +73,23 @@ final class HearingAidListViewModel: ObservableObject {
     }
 
     func saveLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) {
-        let consumedPack = (try? batteryLogService.quickLog(
-            for: hearingAid,
-            timestamp: timestamp,
-            note: note,
-            selectedPackId: selectedPackId,
-            context: context
-        )) ?? true
-        showsInventoryWarning = !consumedPack
-        Task {
-            await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+        do {
+            let consumedPack = try batteryLogService.quickLog(
+                for: hearingAid,
+                timestamp: timestamp,
+                note: note,
+                selectedPackId: selectedPackId,
+                context: context
+            )
+            errorMessage = nil
+            showsInventoryWarning = !consumedPack
+            Task {
+                await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+            }
+            endLog()
+        } catch {
+            errorMessage = "Could not save battery log."
         }
-        endLog()
     }
 
     /// Resolves the selected aid ID to a HearingAid from the provided array.

@@ -82,7 +82,7 @@ struct IssueLogListView: View {
                 hearingAids: hearingAid == nil ? hearingAids : [],
                 preselectedHearingAidId: hearingAid?.id ?? hearingAids.first?.id,
                 onSave: { timestamp, hearingAidId, issue, severity, note in
-                    issueLogService.saveFromSheet(
+                    try issueLogService.saveFromSheet(
                         aids: hearingAids,
                         singleAid: hearingAid,
                         hearingAidId: hearingAidId,
@@ -294,6 +294,7 @@ struct AddIssueLogSheet: View {
     @State private var severityValue: Int = 3
     @State private var note: String = ""
     @State private var selectedHearingAidId: UUID?
+    @State private var errorMessage: String?
 
     let hearingAids: [HearingAid]
     let preselectedHearingAidId: UUID?
@@ -303,7 +304,7 @@ struct AddIssueLogSheet: View {
     let initialIssue: String
     let initialSeverity: Int?
     let initialNote: String
-    let onSave: (Date, UUID?, String, Int?, String?) -> Void
+    let onSave: (Date, UUID?, String, Int?, String?) throws -> Void
     let onCancel: () -> Void
 
     init(
@@ -315,7 +316,7 @@ struct AddIssueLogSheet: View {
         initialIssue: String = "",
         initialSeverity: Int? = nil,
         initialNote: String = "",
-        onSave: @escaping (Date, UUID?, String, Int?, String?) -> Void,
+        onSave: @escaping (Date, UUID?, String, Int?, String?) throws -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.hearingAids = hearingAids
@@ -340,7 +341,7 @@ struct AddIssueLogSheet: View {
                         displayedComponents: [.date, .hourAndMinute]
                     )
                     TextField("What's the problem", text: $issue)
-                        .textInputAutocapitalization(.never)
+                        .textInputAutocapitalization(.sentences)
                         .autocorrectionDisabled()
                     if hearingAids.isEmpty == false {
                         Picker("Hearing Aid", selection: $selectedHearingAidId) {
@@ -371,13 +372,17 @@ struct AddIssueLogSheet: View {
                     Button(saveButtonTitle) {
                         let trimmedIssue = issue.trimmingCharacters(in: .whitespacesAndNewlines)
                         let trimmedNote = note.trimmingCharacters(in: .whitespacesAndNewlines)
-                        onSave(
-                            timestamp,
-                            selectedHearingAidId,
-                            trimmedIssue,
-                            includesSeverity ? severityValue : nil,
-                            trimmedNote.isEmpty ? nil : trimmedNote
-                        )
+                        do {
+                            try onSave(
+                                timestamp,
+                                selectedHearingAidId,
+                                trimmedIssue,
+                                includesSeverity ? severityValue : nil,
+                                trimmedNote.isEmpty ? nil : trimmedNote
+                            )
+                        } catch {
+                            errorMessage = "Could not save issue."
+                        }
                     }
                     .disabled(issue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || (hearingAids.isEmpty == false && selectedHearingAidId == nil))
                 }
@@ -390,6 +395,7 @@ struct AddIssueLogSheet: View {
                 severityValue = initialSeverity ?? 3
                 selectedHearingAidId = preselectedHearingAidId
             }
+            .errorAlert(title: "Unable to Save Issue", message: $errorMessage)
         }
     }
 }

@@ -15,6 +15,7 @@ struct AddHearingAidView: View {
     @State private var name: String = ""
     @State private var model: String = ""
     @State private var batteryType: String = ""
+    @State private var errorMessage: String?
 
     private let hearingAidService = HearingAidService()
 
@@ -29,16 +30,21 @@ struct AddHearingAidView: View {
             TextField("Battery Type (e.g. 312)", text: $batteryType)
 
             Button("Create") {
-                try? hearingAidService.createHearingAid(
-                    name: name,
-                    model: model,
-                    batteryType: batteryType,
-                    context: context
-                )
-                dismiss()
+                do {
+                    try hearingAidService.createHearingAid(
+                        name: name,
+                        model: model,
+                        batteryType: batteryType,
+                        context: context
+                    )
+                    dismiss()
+                } catch {
+                    errorMessage = "Could not create hearing aid."
+                }
             }
             .disabled(trimmedName.isEmpty)
         }
         .navigationTitle("Add Hearing Aid")
+        .errorAlert(title: "Unable to Create Hearing Aid", message: $errorMessage)
     }
 }

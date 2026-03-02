@@ -16,6 +16,7 @@ struct BatteryLogDetailContainer: View {
 
     let route: BatteryLogRoute
     @Query private var logs: [BatteryLog]
+    @State private var errorMessage: String?
 
     private static let durationFormatter = BatteryDurationFormatter()
     private let batteryLogService: BatteryLogProviding = BatteryLogService()
@@ -31,27 +32,38 @@ struct BatteryLogDetailContainer: View {
     }
 
     var body: some View {
-        if let (log, rowModel) = resolvedLogAndRow() {
-            BatteryLogDetailView(
-                log: log,
-                rowModel: rowModel,
-                onSave: { timestamp, note, excludeFromStats, excludePreviousGapFromStats in
-                    try? batteryLogService.updateLog(
-                        log,
-                        timestamp: timestamp,
-                        note: note,
-                        excludeFromStats: excludeFromStats,
-                        excludePreviousGapFromStats: excludePreviousGapFromStats,
-                        context: context
-                    )
-                },
-                onDelete: {
-                    try? batteryLogService.deleteLog(log, context: context)
-                }
-            )
-        } else {
-            ContentUnavailableView("Log Not Found", systemImage: "questionmark.circle")
+        Group {
+            if let (log, rowModel) = resolvedLogAndRow() {
+                BatteryLogDetailView(
+                    log: log,
+                    rowModel: rowModel,
+                    onSave: { timestamp, note, excludeFromStats, excludePreviousGapFromStats in
+                        do {
+                            try batteryLogService.updateLog(
+                                log,
+                                timestamp: timestamp,
+                                note: note,
+                                excludeFromStats: excludeFromStats,
+                                excludePreviousGapFromStats: excludePreviousGapFromStats,
+                                context: context
+                            )
+                        } catch {
+                            errorMessage = "Could not save battery log changes."
+                        }
+                    },
+                    onDelete: {
+                        do {
+                            try batteryLogService.deleteLog(log, context: context)
+                        } catch {
+                            errorMessage = "Could not delete battery log."
+                        }
+                    }
+                )
+            } else {
+                ContentUnavailableView("Log Not Found", systemImage: "questionmark.circle")
+            }
         }
+        .errorAlert(title: "Unable to Save Battery Log", message: $errorMessage)
     }
 
     private func resolvedLogAndRow() -> (BatteryLog, BatteryLogRowModel)? {

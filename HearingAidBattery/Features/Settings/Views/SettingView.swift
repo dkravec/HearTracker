@@ -463,6 +463,7 @@ private struct HearingAidNotificationSettingsView: View {
     @State private var morningHeadsUpEnabled: Bool = true
     @State private var morningTime: Date = Date()
     @State private var hasLoadedSettings: Bool = false
+    @State private var showsNotificationsPermissionAlert: Bool = false
 
     private let notificationService = NotificationService()
 
@@ -589,6 +590,11 @@ private struct HearingAidNotificationSettingsView: View {
         .onChange(of: morningTime) {
             persistNotificationSettings()
         }
+        .alert("Notifications Disabled", isPresented: $showsNotificationsPermissionAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Enable notifications for HearTracker in the system Settings app, then try again.")
+        }
     }
 
     private var activeAids: [HearingAid] {
@@ -621,6 +627,7 @@ private struct HearingAidNotificationSettingsView: View {
             guard granted else {
                 notificationsEnabled = false
                 persistNotificationSettings()
+                showsNotificationsPermissionAlert = true
                 return
             }
             persistNotificationSettings()
@@ -629,12 +636,21 @@ private struct HearingAidNotificationSettingsView: View {
 
     private func persistNotificationSettings() {
         guard hasLoadedSettings else { return }
+        var warningHours = expectedDeathWarningHours
+        var warningMinutes = expectedDeathWarningMinutes
+        if expectedDeathWarningEnabled, warningHours == 0, warningMinutes == 0 {
+            warningHours = 1
+            warningMinutes = 0
+            expectedDeathWarningHours = warningHours
+            expectedDeathWarningMinutes = warningMinutes
+        }
+
         let components = Calendar.current.dateComponents([.hour, .minute], from: morningTime)
         notificationService.saveSettings(
             isEnabled: notificationsEnabled,
             isExpectedDeathWarningEnabled: expectedDeathWarningEnabled,
-            expectedDeathWarningHours: expectedDeathWarningHours,
-            expectedDeathWarningMinutes: expectedDeathWarningMinutes,
+            expectedDeathWarningHours: warningHours,
+            expectedDeathWarningMinutes: warningMinutes,
             isMorningHeadsUpEnabled: morningHeadsUpEnabled,
             morningHour: components.hour ?? 8,
             morningMinute: components.minute ?? 0,

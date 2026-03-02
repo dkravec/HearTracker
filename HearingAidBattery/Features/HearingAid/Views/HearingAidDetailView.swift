@@ -163,6 +163,7 @@ struct HearingAidDetailView: View {
             )
         }
         .appBackground()
+        .errorAlert(title: "Unable to Save", message: $viewModel.errorMessage)
     }
 
     private var statsSection: some View {
@@ -260,8 +261,9 @@ struct HearingAidDetailView: View {
     }
 
     private func deleteHearingAid() {
-        viewModel.deleteHearingAid(aid, context: context)
-        dismiss()
+        if viewModel.deleteHearingAid(aid, context: context) {
+            dismiss()
+        }
     }
 
     private func rowModel(for index: Int) -> BatteryLogRowModel {

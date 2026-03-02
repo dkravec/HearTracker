@@ -234,7 +234,7 @@ struct HearingAidListView: View {
                     viewModel.saveLog(for: aid, timestamp: timestamp, note: note, context: context)
                 },
                 onSavePack: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
-                    try? batteryPackService.createBatteryPack(
+                    try batteryPackService.createBatteryPack(
                         batteryType: batteryType,
                         purchaseDate: purchaseDate,
                         batteriesPerPack: batteriesPerPack,
@@ -286,6 +286,7 @@ struct HearingAidListView: View {
         } message: {
             Text("This action cannot be undone.")
         }
+        .errorAlert(title: "Unable to Save", message: $viewModel.errorMessage)
     }
 
     private var deletePackAlertBinding: Binding<Bool> {
@@ -458,7 +459,7 @@ private struct AddEntryChoiceSheet: View {
     let packs: [BatteryPack]
     let defaultAidId: UUID?
     let onSaveBatteryLog: (HearingAid, Date, String?, UUID?) -> Void
-    let onSavePack: (String, String?, Date, Int, Int, Decimal?, String?) -> Void
+    let onSavePack: (String, String?, Date, Int, Int, Decimal?, String?) throws -> Void
     private let issueLogService = IssueLogService()
 
     @State private var logNote: String = ""
@@ -502,7 +503,15 @@ private struct AddEntryChoiceSheet: View {
                             existingPacks: packs.sorted { $0.purchaseDate < $1.purchaseDate },
                             previousPack: packs.sorted { $0.purchaseDate < $1.purchaseDate }.last,
                             onSave: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
-                                onSavePack(batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode)
+                                try onSavePack(
+                                    batteryType,
+                                    brand,
+                                    purchaseDate,
+                                    batteriesPerPack,
+                                    numberOfPacks,
+                                    priceAmount,
+                                    currencyCode
+                                )
                                 dismiss()
                             },
                             onCancel: { dismiss() },
@@ -525,7 +534,7 @@ private struct AddEntryChoiceSheet: View {
                             hearingAids: activeAids,
                             preselectedHearingAidId: selectedAidId ?? defaultAidId ?? activeAids.first?.id,
                             onSave: { timestamp, hearingAidId, issue, severity, note in
-                                issueLogService.saveFromSheet(
+                                try issueLogService.saveFromSheet(
                                     aids: activeAids,
                                     hearingAidId: hearingAidId,
                                     timestamp: timestamp,

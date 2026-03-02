@@ -22,6 +22,7 @@ final class HearingAidDetailViewModel: ObservableObject {
     @Published var logTimestamp: Date = Date()
     @Published var showsInventoryWarning: Bool = false
     @Published var selectedPackId: UUID?
+    @Published var errorMessage: String?
 
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
@@ -54,6 +55,7 @@ final class HearingAidDetailViewModel: ObservableObject {
     }
 
     func beginEditing(with hearingAid: HearingAid) {
+        errorMessage = nil
         editName = hearingAid.name
         editModel = hearingAid.model ?? ""
         editBatteryType = hearingAid.batteryType ?? ""
@@ -73,19 +75,30 @@ final class HearingAidDetailViewModel: ObservableObject {
     }
 
     func saveEdits(for hearingAid: HearingAid, context: ModelContext) {
-        try? hearingAidService.updateHearingAid(
-            hearingAid,
-            name: editName,
-            model: editModel,
-            batteryType: editBatteryType,
-            retired: editRetired,
-            context: context
-        )
-        endEditing(resetWith: hearingAid, reset: true)
+        do {
+            try hearingAidService.updateHearingAid(
+                hearingAid,
+                name: editName,
+                model: editModel,
+                batteryType: editBatteryType,
+                retired: editRetired,
+                context: context
+            )
+            errorMessage = nil
+            endEditing(resetWith: hearingAid, reset: true)
+        } catch {
+            errorMessage = "Could not save hearing aid changes."
+        }
     }
 
-    func deleteHearingAid(_ hearingAid: HearingAid, context: ModelContext) {
-        try? hearingAidService.deleteHearingAid(hearingAid, context: context)
+    func deleteHearingAid(_ hearingAid: HearingAid, context: ModelContext) -> Bool {
+        do {
+            try hearingAidService.deleteHearingAid(hearingAid, context: context)
+            return true
+        } catch {
+            errorMessage = "Could not delete hearing aid."
+            return false
+        }
     }
 
     func updateLog(
@@ -97,42 +110,55 @@ final class HearingAidDetailViewModel: ObservableObject {
         context: ModelContext
     ) {
         let hearingAidId = log.hearingAid?.id
-        try? batteryLogService.updateLog(
-            log,
-            timestamp: timestamp,
-            note: note,
-            excludeFromStats: excludeFromStats,
-            excludePreviousGapFromStats: excludePreviousGapFromStats,
-            context: context
-        )
-        if let hearingAidId {
-            Task {
-                await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+        do {
+            try batteryLogService.updateLog(
+                log,
+                timestamp: timestamp,
+                note: note,
+                excludeFromStats: excludeFromStats,
+                excludePreviousGapFromStats: excludePreviousGapFromStats,
+                context: context
+            )
+            if let hearingAidId {
+                Task {
+                    await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+                }
             }
+        } catch {
+            errorMessage = "Could not update battery log."
         }
     }
 
     func deleteLog(_ log: BatteryLog, context: ModelContext) {
         let hearingAidId = log.hearingAid?.id
-        try? batteryLogService.deleteLog(log, context: context)
-        if let hearingAidId {
-            Task {
-                await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+        do {
+            try batteryLogService.deleteLog(log, context: context)
+            if let hearingAidId {
+                Task {
+                    await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+                }
             }
+        } catch {
+            errorMessage = "Could not delete battery log."
         }
     }
 
     func deleteLogs(at offsets: IndexSet, logs: [BatteryLog], context: ModelContext) {
         let hearingAidId = offsets.compactMap { logs[$0].hearingAid?.id }.first
-        try? batteryLogService.deleteLogs(at: offsets, from: logs, context: context)
-        if let hearingAidId {
-            Task {
-                await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+        do {
+            try batteryLogService.deleteLogs(at: offsets, from: logs, context: context)
+            if let hearingAidId {
+                Task {
+                    await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+                }
             }
+        } catch {
+            errorMessage = "Could not delete selected battery logs."
         }
     }
 
     func beginLog() {
+        errorMessage = nil
         logNote = ""
         logTimestamp = Date()
         selectedPackId = nil
@@ -147,18 +173,23 @@ final class HearingAidDetailViewModel: ObservableObject {
     }
 
     func saveLog(for hearingAid: HearingAid, timestamp: Date, note: String?, context: ModelContext) {
-        let consumedPack = (try? batteryLogService.quickLog(
-            for: hearingAid,
-            timestamp: timestamp,
-            note: note,
-            selectedPackId: selectedPackId,
-            context: context
-        )) ?? true
-        showsInventoryWarning = !consumedPack
-        Task {
-            await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+        do {
+            let consumedPack = try batteryLogService.quickLog(
+                for: hearingAid,
+                timestamp: timestamp,
+                note: note,
+                selectedPackId: selectedPackId,
+                context: context
+            )
+            errorMessage = nil
+            showsInventoryWarning = !consumedPack
+            Task {
+                await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+            }
+            endLog()
+        } catch {
+            errorMessage = "Could not save battery log."
         }
-        endLog()
     }
 
     func dismissInventoryWarning() {

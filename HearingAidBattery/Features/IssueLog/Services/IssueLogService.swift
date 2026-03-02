@@ -65,7 +65,7 @@ final class IssueLogService {
         severity: Int?,
         note: String?,
         context: ModelContext
-    ) {
+    ) throws {
         let targetAid: HearingAid? = {
             if let singleAid { return singleAid }
             guard let hearingAidId else { return nil }
@@ -81,7 +81,7 @@ final class IssueLogService {
         descriptor.fetchLimit = 1
         let currentLogId = (try? context.fetch(descriptor))?.first?.id
 
-        try? createIssueLog(
+        try createIssueLog(
             for: targetAid,
             timestamp: timestamp,
             issue: issue,
