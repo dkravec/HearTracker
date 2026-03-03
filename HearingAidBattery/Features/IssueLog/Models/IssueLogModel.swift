@@ -11,6 +11,7 @@ import SwiftData
 @Model
 final class IssueLog {
     var id: UUID = UUID()
+    var spaceId: UUID = Space.defaultSpaceId
     var timestamp: Date = Date()
 
     var issue: String = ""
@@ -24,6 +25,7 @@ final class IssueLog {
     var linkedBatteryLogId: UUID?    // optional link to “current” at time of issue
 
     init(
+        spaceId: UUID = Space.defaultSpaceId,
         hearingAid: HearingAid,
         timestamp: Date = Date(),
         issue: String,
@@ -33,6 +35,7 @@ final class IssueLog {
         resolvedAt: Date? = nil,
         resolutionNote: String? = nil
     ) {
+        self.spaceId = spaceId
         self.hearingAid = hearingAid
         self.timestamp = timestamp
         self.issue = issue

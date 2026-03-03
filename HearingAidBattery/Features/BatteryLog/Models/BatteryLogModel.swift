@@ -17,6 +17,7 @@ struct BatteryLogRoute: Hashable {
 @Model
 final class BatteryLog {
     var id: UUID = UUID()
+    var spaceId: UUID = Space.defaultSpaceId
     var timestamp: Date = Date()
     var note: String?
     
@@ -32,12 +33,14 @@ final class BatteryLog {
     var batteryType: String?
 
     init(
+        spaceId: UUID = Space.defaultSpaceId,
         hearingAid: HearingAid,
         timestamp: Date = Date(),
         note: String? = nil,
         excludeFromStats: Bool = false,
         excludePreviousGapFromStats: Bool = false
     ) {
+        self.spaceId = spaceId
         self.hearingAid = hearingAid
         self.timestamp = timestamp
         self.note = note

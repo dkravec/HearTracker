@@ -13,6 +13,7 @@ import Foundation
 struct HearingAidBatteryApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
+            Space.self,
             HearingAid.self,
             BatteryLog.self,
             BatteryPack.self,
@@ -27,6 +28,8 @@ struct HearingAidBatteryApp: App {
 
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            
+            try SpaceMigrationService.runIfNeeded(container: container)
 #if DEBUG
             let configuredStoreURL = modelConfiguration.url.absoluteString
             let resolvedStoreURLs = container.configurations.map { $0.url.absoluteString }
@@ -40,7 +43,12 @@ struct HearingAidBatteryApp: App {
 
             // Retry once for transient startup failures without mutating or switching stores.
             if let retryContainer = try? ModelContainer(for: schema, configurations: [modelConfiguration]) {
-                return retryContainer
+                do {
+                    try SpaceMigrationService.runIfNeeded(container: retryContainer)
+                    return retryContainer
+                } catch {
+                    print("Retry migration failed: \(error)")
+                }
             }
 
             fatalError("Could not create ModelContainer. Automatic reset/fallback is disabled to avoid data loss. Error: \(error)")

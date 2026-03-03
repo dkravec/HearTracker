@@ -12,6 +12,7 @@ import SwiftData
 final class BatteryPack {
     var id: UUID = UUID()
     var createdAt: Date = Date()
+    var spaceId: UUID = Space.defaultSpaceId
 
     var batteryType: String = ""
     var purchaseDate: Date = Date()
@@ -34,6 +35,7 @@ final class BatteryPack {
     var logs: [BatteryLog]?
 
     init(
+         spaceId: UUID = Space.defaultSpaceId,
          batteryType: String,
          purchaseDate: Date = Date(),
          batteriesPerPack: Int,
@@ -42,6 +44,7 @@ final class BatteryPack {
          currencyCode: String? = nil,
          brand: String? = nil
     ) {
+        self.spaceId = spaceId
         self.batteryType = batteryType
         self.purchaseDate = purchaseDate
         self.batteriesPerPack = batteriesPerPack

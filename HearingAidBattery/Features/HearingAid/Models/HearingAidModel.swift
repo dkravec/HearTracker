@@ -12,6 +12,7 @@ import SwiftData
 final class HearingAid {
     var id: UUID = UUID()
     var createdAt: Date = Date()
+    var spaceId: UUID = Space.defaultSpaceId
     var name: String = ""
     var model: String?
     var batteryType: String?
@@ -25,12 +26,14 @@ final class HearingAid {
     var issues: [IssueLog]?
 
     init(
+        spaceId: UUID = Space.defaultSpaceId,
         name: String,
         model: String? = nil,
         batteryType: String? = nil,
         retired: Bool = false,
         notificationsEnabled: Bool = true
     ) {
+        self.spaceId = spaceId
         self.name = name
         self.model = model
         self.batteryType = batteryType
