@@ -10,10 +10,10 @@ import SwiftData
 
 @Model
 final class Space {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var roleHint: String
-    var createdAt: Date
+    var id: UUID = UUID()
+    var name: String = "Personal"
+    var roleHint: String = "self"
+    var createdAt: Date = Date()
 
     init(
         id: UUID = UUID(),

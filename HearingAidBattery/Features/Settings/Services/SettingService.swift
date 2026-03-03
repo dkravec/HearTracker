@@ -9,6 +9,7 @@ import Foundation
 import SwiftData
 
 struct DeleteAllDataSummary {
+    let spaces: Int
     let hearingAids: Int
     let batteryPacks: Int
     let issueLogs: Int
@@ -16,7 +17,7 @@ struct DeleteAllDataSummary {
     let notifications: Int
 
     var total: Int {
-        hearingAids + batteryPacks + issueLogs + batteryLogs + notifications
+        spaces + hearingAids + batteryPacks + issueLogs + batteryLogs + notifications
     }
 }
 
@@ -46,6 +47,7 @@ struct SettingService {
 
         try context.save()
         return DeleteAllDataSummary(
+            spaces: 0,
             hearingAids: hearingAids.count,
             batteryPacks: packs.count,
             issueLogs: issues.count,
@@ -55,6 +57,9 @@ struct SettingService {
     }
 
     func deleteAllData(context: ModelContext) throws -> DeleteAllDataSummary {
+        let spaces = try context.fetch(FetchDescriptor<Space>())
+        for item in spaces { context.delete(item) }
+
         let hearingAids = try context.fetch(FetchDescriptor<HearingAid>())
         for item in hearingAids { context.delete(item) }
 
@@ -72,6 +77,7 @@ struct SettingService {
 
         try context.save()
         return DeleteAllDataSummary(
+            spaces: spaces.count,
             hearingAids: hearingAids.count,
             batteryPacks: packs.count,
             issueLogs: issues.count,

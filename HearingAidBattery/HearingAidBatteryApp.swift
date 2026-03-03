@@ -67,13 +67,65 @@ struct HearingAidBatteryApp: App {
 
 private struct AppRootView: View {
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @EnvironmentObject private var activeSpaceSelection: ActiveSpaceSelectionService
+    @AppStorage("onboarding.completed") private var onboardingCompleted: Bool = false
+    @AppStorage("onboarding.step") private var onboardingStepRaw: String = "name"
+    @AppStorage("onboarding.spaceId") private var onboardingSpaceIdString: String = ""
 
     var body: some View {
-        ContentView()
-            .appBackground()
-            .onAppear {
-                activeSpaceSelection.bootstrap(context: context)
+        Group {
+            if onboardingCompleted == false {
+                OnboardingFlowView()
+                    .id(activeSpaceSelection.activeSpaceId)
+            } else {
+                ContentView()
+                    .id(activeSpaceSelection.activeSpaceId)
             }
+        }
+        .appBackground()
+        .onAppear {
+            activeSpaceSelection.bootstrap(context: context)
+            reevaluateFlow()
+        }
+        .onChange(of: activeSpaceSelection.activeSpaceId) {
+            reevaluateFlow()
+        }
+        .onChange(of: scenePhase) {
+            if scenePhase == .active {
+                reevaluateFlow()
+            }
+        }
+    }
+
+    private func reevaluateFlow() {
+        let currentSpaceId = SpaceService.currentSpaceId(context: context)
+        if activeSpaceSelection.activeSpaceId != currentSpaceId {
+            activeSpaceSelection.refresh(context: context)
+        }
+
+        // One-way auto-complete only for legacy/existing users who have
+        // not started onboarding progress in this install.
+        if onboardingCompleted == false,
+           hasOnboardingProgress == false,
+           hasAnyTrackedData() {
+            onboardingCompleted = true
+        }
+    }
+
+    private var hasOnboardingProgress: Bool {
+        onboardingStepRaw != "name" || onboardingSpaceIdString.isEmpty == false
+    }
+
+    private func hasAnyTrackedData() -> Bool {
+        var aidDescriptor = FetchDescriptor<HearingAid>()
+        aidDescriptor.fetchLimit = 1
+        if ((try? context.fetch(aidDescriptor)) ?? []).isEmpty == false {
+            return true
+        }
+
+        var packDescriptor = FetchDescriptor<BatteryPack>()
+        packDescriptor.fetchLimit = 1
+        return ((try? context.fetch(packDescriptor)) ?? []).isEmpty == false
     }
 }

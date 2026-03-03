@@ -12,6 +12,9 @@ import UniformTypeIdentifiers
 struct SettingView: View {
     @Environment(\.modelContext) private var context
     @EnvironmentObject private var activeSpaceSelection: ActiveSpaceSelectionService
+    @AppStorage("onboarding.completed") private var onboardingCompleted: Bool = false
+    @AppStorage("onboarding.step") private var onboardingStepRaw: String = "name"
+    @AppStorage("onboarding.spaceId") private var onboardingSpaceIdString: String = ""
     @Query private var hearingAids: [HearingAid]
 
     @State private var showsDeleteCurrentSpaceDataAlert: Bool = false
@@ -161,6 +164,9 @@ struct SettingView: View {
                 do {
                     let summary = try settingService.deleteAllData(context: context)
                     resultMessage = deleteAllSummaryText(summary)
+                    onboardingStepRaw = "name"
+                    onboardingSpaceIdString = ""
+                    onboardingCompleted = false
                     rescheduleNotifications()
                 } catch {
                     resultMessage = "Delete failed."
@@ -389,6 +395,7 @@ struct SettingView: View {
     private func deleteAllSummaryText(_ summary: DeleteAllDataSummary) -> String {
         """
         Deleted \(summary.total) records:
+        \(summary.spaces) spaces
         \(summary.hearingAids) hearing aids
         \(summary.batteryLogs) battery logs
         \(summary.batteryPacks) battery packs
@@ -486,7 +493,7 @@ struct SettingView: View {
     }
 }
 
-private struct HearingAidNotificationSettingsView: View {
+struct HearingAidNotificationSettingsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \NotificationModel.createdAt, order: .forward) private var notificationModels: [NotificationModel]
     @Query private var hearingAids: [HearingAid]
