@@ -16,6 +16,7 @@ struct SettingView: View {
     @AppStorage("onboarding.step") private var onboardingStepRaw: String = "name"
     @AppStorage("onboarding.spaceId") private var onboardingSpaceIdString: String = ""
     @Query private var hearingAids: [HearingAid]
+    @Query(sort: \Space.createdAt, order: .forward) private var spaces: [Space]
 
     @State private var showsDeleteCurrentSpaceDataAlert: Bool = false
     @State private var showsDeleteAllDataAlert: Bool = false
@@ -25,6 +26,7 @@ struct SettingView: View {
     @State private var showsImportConflictResolver: Bool = false
     @State private var showsFileImporter: Bool = false
     @State private var showsFileExporter: Bool = false
+    @State private var showsSpaceSwitcher: Bool = false
     @State private var pendingDeleteLogsAidId: UUID?
     @State private var pendingImportData: Data?
     @State private var importConflictAnalysis: BackupIssueLinkConflictAnalysis?
@@ -59,6 +61,16 @@ struct SettingView: View {
                             systemImage: "bell.badge.fill"
                         ) {
                             HearingAidNotificationSettingsView()
+                        }
+
+                        Divider()
+
+                        settingsActionRow(
+                            title: "Switch Person",
+                            subtitle: currentSpaceName,
+                            systemImage: "person.2.fill"
+                        ) {
+                            showsSpaceSwitcher = true
                         }
 
                         Divider()
@@ -303,10 +315,36 @@ struct SettingView: View {
                 EmptyView()
             }
         }
+        .sheet(isPresented: $showsSpaceSwitcher) {
+            SpaceSwitcherSheet(
+                spaces: spaces,
+                activeSpaceId: activeSpaceSelection.activeSpaceId,
+                onSelect: { space in
+                    activeSpaceSelection.setCurrentSpace(space.id, context: context)
+                    showsSpaceSwitcher = false
+                },
+                onCreate: { name, roleHint in
+                    do {
+                        let created = try SpaceService.createSpace(name: name, roleHint: roleHint, context: context)
+                        activeSpaceSelection.setCurrentSpace(created.id, context: context)
+                        showsSpaceSwitcher = false
+                    } catch {
+                        resultMessage = "Could not create person space."
+                    }
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .appBackground()
+        }
     }
 
     private var activeAids: [HearingAid] {
         hearingAids.filter { !$0.retired }
+    }
+
+    private var currentSpaceName: String {
+        spaces.first(where: { $0.id == activeSpaceSelection.activeSpaceId })?.name ?? "Personal"
     }
 
     private func settingsRowLabel(title: String, subtitle: String, systemImage: String) -> some View {
@@ -490,6 +528,114 @@ struct SettingView: View {
             settingsRowLabel(title: title, subtitle: subtitle, systemImage: systemImage)
         }
         .buttonStyle(.plain)
+    }
+}
+
+private struct SpaceSwitcherSheet: View {
+    private enum RoleOption: String, CaseIterable, Identifiable {
+        case selfRole = "self"
+        case child = "child"
+        case dependent = "dependent"
+        case other = "other"
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .selfRole: return "Myself"
+            case .child: return "My child"
+            case .dependent: return "Someone I care for"
+            case .other: return "Other"
+            }
+        }
+    }
+
+    @Environment(\.dismiss) private var dismiss
+
+    let spaces: [Space]
+    let activeSpaceId: UUID
+    let onSelect: (Space) -> Void
+    let onCreate: (String, String) -> Void
+
+    @State private var showsCreate: Bool = false
+    @State private var newName: String = ""
+    @State private var roleOption: RoleOption = .other
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("People") {
+                    ForEach(spaces) { space in
+                        Button {
+                            onSelect(space)
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(space.name)
+                                        .foregroundStyle(.primary)
+                                    Text(space.roleHint.capitalized)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 8)
+                                if space.id == activeSpaceId {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(.green)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Switch Person")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Close") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Add Person") {
+                        showsCreate = true
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showsCreate) {
+            NavigationStack {
+                Form {
+                    Section("Person") {
+                        TextField("Name", text: $newName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                        Picker("Tracking For", selection: $roleOption) {
+                            ForEach(RoleOption.allCases) { option in
+                                Text(option.label).tag(option)
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Add Person")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            showsCreate = false
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Save") {
+                            onCreate(newName, roleOption.rawValue)
+                        }
+                        .disabled(newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .appBackground()
+        }
     }
 }
 

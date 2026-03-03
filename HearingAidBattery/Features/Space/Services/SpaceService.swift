@@ -40,6 +40,16 @@ enum SpaceService {
         UserDefaults.standard.set(spaceId.uuidString, forKey: activeSpaceIdKey)
     }
 
+    @discardableResult
+    static func createSpace(name: String, roleHint: String, context: ModelContext) throws -> Space {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedName = trimmedName.isEmpty ? "Personal" : trimmedName
+        let created = Space(name: resolvedName, roleHint: roleHint)
+        context.insert(created)
+        try context.save()
+        return created
+    }
+
     static var activeSpaceIdForQueries: UUID {
         storedActiveSpaceId() ?? Space.defaultSpaceId
     }
