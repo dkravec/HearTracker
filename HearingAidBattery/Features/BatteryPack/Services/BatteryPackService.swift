@@ -56,6 +56,7 @@ final class BatteryPackService {
             currencyCode: currencyCode
         )
         let pack = BatteryPack(
+            spaceId: SpaceService.currentSpaceId(context: context),
             batteryType: normalized.batteryType,
             purchaseDate: purchaseDate,
             batteriesPerPack: normalized.batteriesPerPack,
@@ -154,11 +155,12 @@ final class BatteryPackService {
     func consumeOneBattery(
         selectedPackId: UUID?,
         preferredBatteryType: String?,
+        spaceId: UUID,
         context: ModelContext
     ) -> BatteryPack? {
         let descriptor = FetchDescriptor<BatteryPack>(
             predicate: #Predicate<BatteryPack> {
-                $0.quantityRemaining > 0 && $0.isDone == false
+                $0.quantityRemaining > 0 && $0.isDone == false && $0.spaceId == spaceId
             },
             sortBy: [SortDescriptor(\BatteryPack.purchaseDate, order: .forward)]
         )

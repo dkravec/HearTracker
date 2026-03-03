@@ -2,6 +2,7 @@ import Foundation
 
 struct HearingAidDTO_v1: Codable {
     let id: UUID
+    let spaceId: UUID?
     let createdAt: Date
     let name: String
     let model: String?
@@ -12,6 +13,7 @@ struct HearingAidDTO_v1: Codable {
 
 struct BatteryLogDTO_v1: Codable {
     let id: UUID
+    let spaceId: UUID?
     let hearingAidId: UUID?
     let batteryPackId: UUID?
     let timestamp: Date
@@ -23,6 +25,7 @@ struct BatteryLogDTO_v1: Codable {
 
 struct BatteryPackDTO_v1: Codable {
     let id: UUID
+    let spaceId: UUID?
     let createdAt: Date
     let batteryType: String
     let purchaseDate: Date
@@ -41,6 +44,7 @@ struct BatteryPackDTO_v1: Codable {
 
 struct IssueLogDTO_v1: Codable {
     let id: UUID
+    let spaceId: UUID?
     let hearingAidId: UUID?
     let timestamp: Date
     let issue: String
@@ -50,6 +54,13 @@ struct IssueLogDTO_v1: Codable {
     let isResolved: Bool?
     let resolvedAt: Date?
     let resolutionNote: String?
+}
+
+struct SpaceDTO_v1: Codable {
+    let id: UUID
+    let name: String
+    let roleHint: String
+    let createdAt: Date
 }
 
 struct SettingsDTO_v1: Codable {

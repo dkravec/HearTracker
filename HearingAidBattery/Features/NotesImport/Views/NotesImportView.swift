@@ -22,7 +22,7 @@ struct NotesImportView: View {
     }
 
     @Environment(\.modelContext) private var context
-    @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
+    @Query private var hearingAids: [HearingAid]
 
     @State private var rawInput: String = ""
     @State private var selectedHearingAidId: UUID?
@@ -36,6 +36,15 @@ struct NotesImportView: View {
 
     private let parser = NotesImportParserService()
     private let commitService = NotesImportCommitService()
+
+    init() {
+        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        _hearingAids = Query(
+            filter: #Predicate<HearingAid> { $0.spaceId == activeSpaceId },
+            sort: \HearingAid.createdAt,
+            order: .reverse
+        )
+    }
 
     private var activeAids: [HearingAid] {
         hearingAids.filter { !$0.retired }

@@ -17,7 +17,12 @@ final class HearingAidService {
         let normalizedModel = (trimmedModel?.isEmpty == true) ? nil : trimmedModel
         let normalizedBatteryType = (trimmedBatteryType?.isEmpty == true) ? nil : trimmedBatteryType
 
-        let hearingAid = HearingAid(name: trimmedName, model: normalizedModel, batteryType: normalizedBatteryType)
+        let hearingAid = HearingAid(
+            spaceId: SpaceService.currentSpaceId(context: context),
+            name: trimmedName,
+            model: normalizedModel,
+            batteryType: normalizedBatteryType
+        )
         context.insert(hearingAid)
         try context.save()
     }

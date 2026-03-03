@@ -14,7 +14,7 @@ struct HearingAidDetailView: View {
 
     let aid: HearingAid
     @Query private var logs: [BatteryLog]
-    @Query(sort: \BatteryPack.purchaseDate, order: .forward) private var packs: [BatteryPack]
+    @Query private var packs: [BatteryPack]
 
     @StateObject private var viewModel = HearingAidDetailViewModel()
     @StateObject private var batteryStatusViewModel = BatteryStatusViewModel()
@@ -28,10 +28,16 @@ struct HearingAidDetailView: View {
     init(aid: HearingAid) {
         self.aid = aid
         let hearingAidId = aid.id
+        let spaceId = aid.spaceId
         _logs = Query(
-            filter: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId },
+            filter: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId && $0.spaceId == spaceId },
             sort: \BatteryLog.timestamp,
             order: .reverse
+        )
+        _packs = Query(
+            filter: #Predicate<BatteryPack> { $0.spaceId == spaceId },
+            sort: \BatteryPack.purchaseDate,
+            order: .forward
         )
     }
 

@@ -9,15 +9,20 @@ import SwiftUI
 import SwiftData
 
 struct ContentView: View {
+    @EnvironmentObject private var activeSpaceSelection: ActiveSpaceSelectionService
+
     var body: some View {
         HearingAidListView()
+            .id(activeSpaceSelection.activeSpaceId)
     }
 }
 
 #Preview {
     ContentView()
+        .environmentObject(ActiveSpaceSelectionService())
         .modelContainer(
             for: [
+                Space.self,
                 HearingAid.self,
                 BatteryLog.self,
                 BatteryPack.self,

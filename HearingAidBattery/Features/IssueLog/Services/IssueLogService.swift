@@ -20,6 +20,7 @@ final class IssueLogService {
         context: ModelContext
     ) throws {
         let issueLog = IssueLog(
+            spaceId: hearingAid.spaceId,
             hearingAid: hearingAid,
             timestamp: timestamp,
             issue: issue.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -93,8 +94,9 @@ final class IssueLogService {
         guard let targetAid else { return }
 
         let targetAidId = targetAid.id
+        let targetSpaceId = targetAid.spaceId
         var descriptor = FetchDescriptor<BatteryLog>(
-            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == targetAidId },
+            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == targetAidId && $0.spaceId == targetSpaceId },
             sortBy: [SortDescriptor(\BatteryLog.timestamp, order: .reverse)]
         )
         descriptor.fetchLimit = 1

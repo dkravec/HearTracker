@@ -25,13 +25,16 @@ struct IssueLogListView: View {
         self.hearingAids = hearingAids
         if let hearingAid {
             let hearingAidId = hearingAid.id
+            let spaceId = hearingAid.spaceId
             _issues = Query(
-                filter: #Predicate<IssueLog> { $0.hearingAid?.id == hearingAidId },
+                filter: #Predicate<IssueLog> { $0.hearingAid?.id == hearingAidId && $0.spaceId == spaceId },
                 sort: \IssueLog.timestamp,
                 order: .reverse
             )
         } else {
+            let activeSpaceId = SpaceService.activeSpaceIdForQueries
             _issues = Query(
+                filter: #Predicate<IssueLog> { $0.spaceId == activeSpaceId },
                 sort: \IssueLog.timestamp,
                 order: .reverse
             )

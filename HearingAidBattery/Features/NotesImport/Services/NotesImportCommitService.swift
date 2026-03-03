@@ -24,12 +24,19 @@ struct NotesImportCommitService {
 
             switch item.kind {
             case .battery:
-                if batteryLogExists(timestamp: timestamp, note: noteText, hearingAidId: hearingAid.id, context: context) {
+                if batteryLogExists(
+                    timestamp: timestamp,
+                    note: noteText,
+                    hearingAidId: hearingAid.id,
+                    spaceId: hearingAid.spaceId,
+                    context: context
+                ) {
                     skippedDuplicates += 1
                     continue
                 }
 
                 let log = BatteryLog(
+                    spaceId: hearingAid.spaceId,
                     hearingAid: hearingAid,
                     timestamp: timestamp,
                     note: noteText
@@ -42,7 +49,13 @@ struct NotesImportCommitService {
                     ?? normalized(item.originalLine)
                     ?? "Imported issue"
 
-                if issueExists(timestamp: timestamp, issue: issueText, hearingAidId: hearingAid.id, context: context) {
+                if issueExists(
+                    timestamp: timestamp,
+                    issue: issueText,
+                    hearingAidId: hearingAid.id,
+                    spaceId: hearingAid.spaceId,
+                    context: context
+                ) {
                     skippedDuplicates += 1
                     continue
                 }
@@ -72,9 +85,15 @@ struct NotesImportCommitService {
         )
     }
 
-    private func batteryLogExists(timestamp: Date, note: String?, hearingAidId: UUID, context: ModelContext) -> Bool {
+    private func batteryLogExists(
+        timestamp: Date,
+        note: String?,
+        hearingAidId: UUID,
+        spaceId: UUID,
+        context: ModelContext
+    ) -> Bool {
         let descriptor = FetchDescriptor<BatteryLog>(
-            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId },
+            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId && $0.spaceId == spaceId },
             sortBy: [SortDescriptor(\BatteryLog.timestamp, order: .reverse)]
         )
         let logs = (try? context.fetch(descriptor)) ?? []
@@ -83,9 +102,15 @@ struct NotesImportCommitService {
         }
     }
 
-    private func issueExists(timestamp: Date, issue: String, hearingAidId: UUID, context: ModelContext) -> Bool {
+    private func issueExists(
+        timestamp: Date,
+        issue: String,
+        hearingAidId: UUID,
+        spaceId: UUID,
+        context: ModelContext
+    ) -> Bool {
         let descriptor = FetchDescriptor<IssueLog>(
-            predicate: #Predicate<IssueLog> { $0.hearingAid?.id == hearingAidId },
+            predicate: #Predicate<IssueLog> { $0.hearingAid?.id == hearingAidId && $0.spaceId == spaceId },
             sortBy: [SortDescriptor(\IssueLog.timestamp, order: .reverse)]
         )
         let issues = (try? context.fetch(descriptor)) ?? []

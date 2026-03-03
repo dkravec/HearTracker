@@ -41,7 +41,7 @@ struct BatteryPackSectionView: View {
     @Environment(\.modelContext) private var context
 
     let averageDuration: TimeInterval?
-    @Query(sort: \BatteryPack.purchaseDate, order: .forward) private var packs: [BatteryPack]
+    @Query private var packs: [BatteryPack]
 
     @State private var showsAddPackSheet: Bool = false
     @State private var packPendingDelete: BatteryPack?
@@ -53,6 +53,12 @@ struct BatteryPackSectionView: View {
 
     init(averageDuration: TimeInterval?) {
         self.averageDuration = averageDuration
+        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        _packs = Query(
+            filter: #Predicate<BatteryPack> { $0.spaceId == activeSpaceId },
+            sort: \BatteryPack.purchaseDate,
+            order: .forward
+        )
     }
 
     private var activePacks: [BatteryPack] {

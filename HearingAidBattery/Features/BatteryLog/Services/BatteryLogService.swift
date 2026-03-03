@@ -42,15 +42,21 @@ final class BatteryLogService: BatteryLogProviding {
     ) throws -> Bool {
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedNote = (trimmedNote?.isEmpty == true) ? nil : trimmedNote
-        let previousType = mostRecentLoggedBatteryType(for: hearingAid.id, context: context)
+        let previousType = mostRecentLoggedBatteryType(
+            for: hearingAid.id,
+            spaceId: hearingAid.spaceId,
+            context: context
+        )
             ?? hearingAid.batteryType?.trimmingCharacters(in: .whitespacesAndNewlines)
         let consumedPack = batteryPackService.consumeOneBattery(
             selectedPackId: selectedPackId,
             preferredBatteryType: selectedPackId == nil ? previousType : nil,
+            spaceId: hearingAid.spaceId,
             context: context
         )
 
         let newLog = BatteryLog(
+            spaceId: hearingAid.spaceId,
             hearingAid: hearingAid,
             timestamp: timestamp,
             note: normalizedNote
@@ -95,9 +101,9 @@ final class BatteryLogService: BatteryLogProviding {
         try context.save()
     }
 
-    private func mostRecentLoggedBatteryType(for hearingAidId: UUID, context: ModelContext) -> String? {
+    private func mostRecentLoggedBatteryType(for hearingAidId: UUID, spaceId: UUID, context: ModelContext) -> String? {
         let descriptor = FetchDescriptor<BatteryLog>(
-            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId },
+            predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId && $0.spaceId == spaceId },
             sortBy: [SortDescriptor(\BatteryLog.timestamp, order: .reverse)]
         )
         let logs = (try? context.fetch(descriptor)) ?? []

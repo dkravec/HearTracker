@@ -4,8 +4,10 @@ import SwiftData
 @MainActor
 struct BackupExportService {
     private let modelVersion = 1
+    private let backupFormatVersion = "1.1"
 
     func exportJSONData(context: ModelContext) throws -> Data {
+        let spaces = try context.fetch(FetchDescriptor<Space>())
         let hearingAids = try context.fetch(FetchDescriptor<HearingAid>())
         let batteryLogs = try context.fetch(FetchDescriptor<BatteryLog>())
         let batteryPacks = try context.fetch(FetchDescriptor<BatteryPack>())
@@ -13,8 +15,9 @@ struct BackupExportService {
         let notifications = try context.fetch(FetchDescriptor<NotificationModel>())
 
         let envelope = BackupEnvelope(
-            backupFormatVersion: modelVersion,
+            backupFormatVersion: backupFormatVersion,
             exportedAt: Date(),
+            spaces: spaces.map(dto),
             models: BackupModels_v1(
                 hearingAids: ModelBlock(version: modelVersion, items: hearingAids.map(dto)),
                 batteryLogs: ModelBlock(version: modelVersion, items: batteryLogs.map(dto)),
@@ -34,6 +37,7 @@ struct BackupExportService {
     private func dto(_ hearingAid: HearingAid) -> HearingAidDTO_v1 {
         HearingAidDTO_v1(
             id: hearingAid.id,
+            spaceId: hearingAid.spaceId,
             createdAt: hearingAid.createdAt,
             name: hearingAid.name,
             model: hearingAid.model,
@@ -46,6 +50,7 @@ struct BackupExportService {
     private func dto(_ batteryLog: BatteryLog) -> BatteryLogDTO_v1 {
         BatteryLogDTO_v1(
             id: batteryLog.id,
+            spaceId: batteryLog.spaceId,
             hearingAidId: batteryLog.hearingAid?.id,
             batteryPackId: batteryLog.batteryPack?.id,
             timestamp: batteryLog.timestamp,
@@ -59,6 +64,7 @@ struct BackupExportService {
     private func dto(_ batteryPack: BatteryPack) -> BatteryPackDTO_v1 {
         BatteryPackDTO_v1(
             id: batteryPack.id,
+            spaceId: batteryPack.spaceId,
             createdAt: batteryPack.createdAt,
             batteryType: batteryPack.batteryType,
             purchaseDate: batteryPack.purchaseDate,
@@ -79,6 +85,7 @@ struct BackupExportService {
     private func dto(_ issueLog: IssueLog) -> IssueLogDTO_v1 {
         IssueLogDTO_v1(
             id: issueLog.id,
+            spaceId: issueLog.spaceId,
             hearingAidId: issueLog.hearingAid?.id,
             timestamp: issueLog.timestamp,
             issue: issueLog.issue,
@@ -102,6 +109,15 @@ struct BackupExportService {
             isMorningHeadsUpEnabled: notification.isMorningHeadsUpEnabled,
             morningHour: notification.morningHour,
             morningMinute: notification.morningMinute
+        )
+    }
+
+    private func dto(_ space: Space) -> SpaceDTO_v1 {
+        SpaceDTO_v1(
+            id: space.id,
+            name: space.name,
+            roleHint: space.roleHint,
+            createdAt: space.createdAt
         )
     }
 }

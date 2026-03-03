@@ -11,6 +11,8 @@ import Foundation
 
 @main
 struct HearingAidBatteryApp: App {
+    @StateObject private var activeSpaceSelection = ActiveSpaceSelectionService()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Space.self,
@@ -28,8 +30,8 @@ struct HearingAidBatteryApp: App {
 
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
-            
-            try SpaceMigrationService.runIfNeeded(container: container)
+
+            SpaceMigrationService.runIfNeeded(container: container)
 #if DEBUG
             let configuredStoreURL = modelConfiguration.url.absoluteString
             let resolvedStoreURLs = container.configurations.map { $0.url.absoluteString }
@@ -43,12 +45,8 @@ struct HearingAidBatteryApp: App {
 
             // Retry once for transient startup failures without mutating or switching stores.
             if let retryContainer = try? ModelContainer(for: schema, configurations: [modelConfiguration]) {
-                do {
-                    try SpaceMigrationService.runIfNeeded(container: retryContainer)
-                    return retryContainer
-                } catch {
-                    print("Retry migration failed: \(error)")
-                }
+                SpaceMigrationService.runIfNeeded(container: retryContainer)
+                return retryContainer
             }
 
             fatalError("Could not create ModelContainer. Automatic reset/fallback is disabled to avoid data loss. Error: \(error)")
@@ -60,8 +58,22 @@ struct HearingAidBatteryApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView().appBackground()
+            AppRootView()
+                .environmentObject(activeSpaceSelection)
         }
         .modelContainer(sharedModelContainer)
+    }
+}
+
+private struct AppRootView: View {
+    @Environment(\.modelContext) private var context
+    @EnvironmentObject private var activeSpaceSelection: ActiveSpaceSelectionService
+
+    var body: some View {
+        ContentView()
+            .appBackground()
+            .onAppear {
+                activeSpaceSelection.bootstrap(context: context)
+            }
     }
 }

@@ -10,11 +10,25 @@ import SwiftData
 
 struct HearingAidSectionView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
-    @Query(sort: \BatteryPack.purchaseDate, order: .reverse) private var packs: [BatteryPack]
+    @Query private var hearingAids: [HearingAid]
+    @Query private var packs: [BatteryPack]
 
     @StateObject private var viewModel = HearingAidListViewModel()
     @State private var showsAddHearingAidSheet: Bool = false
+
+    init() {
+        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        _hearingAids = Query(
+            filter: #Predicate<HearingAid> { $0.spaceId == activeSpaceId },
+            sort: \HearingAid.createdAt,
+            order: .reverse
+        )
+        _packs = Query(
+            filter: #Predicate<BatteryPack> { $0.spaceId == activeSpaceId },
+            sort: \BatteryPack.purchaseDate,
+            order: .reverse
+        )
+    }
 
     private var activeAids: [HearingAid] {
         viewModel.activeAids(from: hearingAids)

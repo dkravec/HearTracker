@@ -11,8 +11,10 @@ import UniformTypeIdentifiers
 
 struct SettingView: View {
     @Environment(\.modelContext) private var context
-    @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
+    @EnvironmentObject private var activeSpaceSelection: ActiveSpaceSelectionService
+    @Query private var hearingAids: [HearingAid]
 
+    @State private var showsDeleteCurrentSpaceDataAlert: Bool = false
     @State private var showsDeleteAllDataAlert: Bool = false
     @State private var showsDeleteLogsSheet: Bool = false
     @State private var showsDeleteLogsAlert: Bool = false
@@ -32,6 +34,15 @@ struct SettingView: View {
     private let notificationService = NotificationService()
     private let backupExportService = BackupExportService()
     private let backupImportService = BackupImportService()
+
+    init() {
+        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        _hearingAids = Query(
+            filter: #Predicate<HearingAid> { $0.spaceId == activeSpaceId },
+            sort: \HearingAid.createdAt,
+            order: .reverse
+        )
+    }
 
     var body: some View {
         ScrollView {
@@ -108,9 +119,18 @@ struct SettingView: View {
                         Divider()
 
                         Button(role: .destructive) {
+                            showsDeleteCurrentSpaceDataAlert = true
+                        } label: {
+                            Label("Delete Current Space Data", systemImage: "trash")
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+
+                        Divider()
+
+                        Button(role: .destructive) {
                             showsDeleteAllDataAlert = true
                         } label: {
-                            Label("Delete All Data", systemImage: "trash.fill")
+                            Label("Delete All Spaces Data", systemImage: "trash.fill")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -122,7 +142,21 @@ struct SettingView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .appBackground()
-        .alert("Delete All Data?", isPresented: $showsDeleteAllDataAlert) {
+        .alert("Delete Current Space Data?", isPresented: $showsDeleteCurrentSpaceDataAlert) {
+            Button("Delete", role: .destructive) {
+                do {
+                    let summary = try settingService.deleteCurrentSpaceData(context: context)
+                    resultMessage = deleteAllSummaryText(summary)
+                    rescheduleNotifications()
+                } catch {
+                    resultMessage = "Delete failed."
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes hearing aids, battery logs, packs, and issues in the current space only.")
+        }
+        .alert("Delete All Spaces Data?", isPresented: $showsDeleteAllDataAlert) {
             Button("Delete", role: .destructive) {
                 do {
                     let summary = try settingService.deleteAllData(context: context)
@@ -134,7 +168,7 @@ struct SettingView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This will remove hearing aids, battery logs, packs, and issues.")
+            Text("This removes all hearing aids, battery logs, packs, issues, and notification settings across all spaces.")
         }
         .alert("Import Backup?", isPresented: $showsImportBackupAlert) {
             Button("Import", role: .destructive) {
@@ -421,6 +455,7 @@ struct SettingView: View {
     }
 
     private func rescheduleNotifications() {
+        activeSpaceSelection.refresh(context: context)
         Task {
             await notificationService.rescheduleAll(context: context)
         }
@@ -454,7 +489,7 @@ struct SettingView: View {
 private struct HearingAidNotificationSettingsView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \NotificationModel.createdAt, order: .forward) private var notificationModels: [NotificationModel]
-    @Query(sort: \HearingAid.createdAt, order: .reverse) private var hearingAids: [HearingAid]
+    @Query private var hearingAids: [HearingAid]
 
     @State private var notificationsEnabled: Bool = false
     @State private var expectedDeathWarningEnabled: Bool = true
@@ -466,6 +501,15 @@ private struct HearingAidNotificationSettingsView: View {
     @State private var showsNotificationsPermissionAlert: Bool = false
 
     private let notificationService = NotificationService()
+
+    init() {
+        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        _hearingAids = Query(
+            filter: #Predicate<HearingAid> { $0.spaceId == activeSpaceId },
+            sort: \HearingAid.createdAt,
+            order: .reverse
+        )
+    }
 
     var body: some View {
         ScrollView {

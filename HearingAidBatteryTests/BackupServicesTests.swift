@@ -74,7 +74,7 @@ struct BackupServicesTests {
             in: context,
             failureMessage: "Expected unsupported backup format version error"
         ) { error in
-            if case .unsupportedBackupFormatVersion(999) = error { return true }
+            if case .unsupportedBackupFormatVersion("999") = error { return true }
             return false
         }
     }
@@ -280,6 +280,7 @@ struct BackupServicesTests {
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(
             for: Schema([
+                Space.self,
                 HearingAid.self,
                 BatteryLog.self,
                 BatteryPack.self,

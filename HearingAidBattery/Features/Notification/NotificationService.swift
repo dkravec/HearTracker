@@ -112,7 +112,9 @@ final class NotificationService {
         )
         guard let predictedDeath = snapshot.predictedDeath else { return }
         guard let hearingAid = (try? context.fetch(
-            FetchDescriptor<HearingAid>(predicate: #Predicate<HearingAid> { $0.id == hearingAidId })
+            FetchDescriptor<HearingAid>(
+                predicate: #Predicate<HearingAid> { $0.id == hearingAidId }
+            )
         ))?.first else {
             return
         }

@@ -22,6 +22,38 @@ struct DeleteAllDataSummary {
 
 @MainActor
 struct SettingService {
+    func deleteCurrentSpaceData(context: ModelContext) throws -> DeleteAllDataSummary {
+        let activeSpaceId = SpaceService.currentSpaceId(context: context)
+        let hearingAids = try context.fetch(
+            FetchDescriptor<HearingAid>(predicate: #Predicate<HearingAid> { $0.spaceId == activeSpaceId })
+        )
+        for item in hearingAids { context.delete(item) }
+
+        let packs = try context.fetch(
+            FetchDescriptor<BatteryPack>(predicate: #Predicate<BatteryPack> { $0.spaceId == activeSpaceId })
+        )
+        for item in packs { context.delete(item) }
+
+        let issues = try context.fetch(
+            FetchDescriptor<IssueLog>(predicate: #Predicate<IssueLog> { $0.spaceId == activeSpaceId })
+        )
+        for item in issues { context.delete(item) }
+
+        let logs = try context.fetch(
+            FetchDescriptor<BatteryLog>(predicate: #Predicate<BatteryLog> { $0.spaceId == activeSpaceId })
+        )
+        for item in logs { context.delete(item) }
+
+        try context.save()
+        return DeleteAllDataSummary(
+            hearingAids: hearingAids.count,
+            batteryPacks: packs.count,
+            issueLogs: issues.count,
+            batteryLogs: logs.count,
+            notifications: 0
+        )
+    }
+
     func deleteAllData(context: ModelContext) throws -> DeleteAllDataSummary {
         let hearingAids = try context.fetch(FetchDescriptor<HearingAid>())
         for item in hearingAids { context.delete(item) }
@@ -49,7 +81,10 @@ struct SettingService {
     }
 
     func deleteAllBatteryLogs(context: ModelContext) throws -> Int {
-        let logs = try context.fetch(FetchDescriptor<BatteryLog>())
+        let activeSpaceId = SpaceService.currentSpaceId(context: context)
+        let logs = try context.fetch(
+            FetchDescriptor<BatteryLog>(predicate: #Predicate<BatteryLog> { $0.spaceId == activeSpaceId })
+        )
         for log in logs {
             context.delete(log)
         }
@@ -59,12 +94,15 @@ struct SettingService {
 
     func deleteBatteryLogs(for hearingAidId: UUID?, context: ModelContext) throws -> Int {
         let descriptor: FetchDescriptor<BatteryLog>
+        let activeSpaceId = SpaceService.currentSpaceId(context: context)
         if let hearingAidId {
             descriptor = FetchDescriptor<BatteryLog>(
-                predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId }
+                predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == hearingAidId && $0.spaceId == activeSpaceId }
             )
         } else {
-            descriptor = FetchDescriptor<BatteryLog>()
+            descriptor = FetchDescriptor<BatteryLog>(
+                predicate: #Predicate<BatteryLog> { $0.spaceId == activeSpaceId }
+            )
         }
 
         let logs = try context.fetch(descriptor)

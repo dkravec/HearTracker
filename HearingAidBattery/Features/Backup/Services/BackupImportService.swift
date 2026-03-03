@@ -34,7 +34,7 @@ struct BackupIssueLinkCandidate: Identifiable {
 @MainActor
 struct BackupImportService {
     enum BackupImportError: Error {
-        case unsupportedBackupFormatVersion(Int)
+        case unsupportedBackupFormatVersion(String)
         case unsupportedModelVersion(model: String, version: Int)
         case decodingFailed
         case duplicateModelID(model: String, id: UUID)
@@ -42,7 +42,8 @@ struct BackupImportService {
         case unresolvedReference(model: String, field: String, id: UUID)
     }
 
-    private let supportedVersion = 1
+    private let supportedModelVersion = 1
+    private let supportedFormatVersions: Set<String> = ["1", "1.0", "1.1", "v1-1"]
 
     func importJSONData(
         _ data: Data,
@@ -53,6 +54,7 @@ struct BackupImportService {
         do {
             return try replaceAllData(
                 with: envelope.models,
+                spaces: envelope.spaces,
                 context: context,
                 issueLogLinkedBatteryLogOverrides: issueLogLinkedBatteryLogOverrides
             )
@@ -108,9 +110,15 @@ struct BackupImportService {
 
     private func replaceAllData(
         with models: BackupModels_v1,
+        spaces: [SpaceDTO_v1],
         context: ModelContext,
         issueLogLinkedBatteryLogOverrides: [UUID: UUID?]
     ) throws -> BackupImportSummary {
+        let _ = SpaceService.currentSpaceId(context: context)
+        let defaultSpace = try upsertSpaces(spaces, context: context)
+        let allSpaces = try context.fetch(FetchDescriptor<Space>())
+        let validSpaceIds = Set(allSpaces.map(\.id))
+
         let currentLogs = try context.fetch(FetchDescriptor<BatteryLog>())
         let currentIssues = try context.fetch(FetchDescriptor<IssueLog>())
         let currentPacks = try context.fetch(FetchDescriptor<BatteryPack>())
@@ -124,7 +132,13 @@ struct BackupImportService {
         for item in currentAids { context.delete(item) }
 
         let aidsById = try makeDictionary(items: models.hearingAids.items, modelName: "hearingAids") { dto in
+            let resolvedSpaceId = resolvedSpaceId(
+                candidate: dto.spaceId,
+                validSpaceIds: validSpaceIds,
+                fallbackSpaceId: defaultSpace.id
+            )
             let aid = HearingAid(
+                spaceId: resolvedSpaceId,
                 name: dto.name,
                 model: dto.model,
                 batteryType: dto.batteryType,
@@ -138,7 +152,13 @@ struct BackupImportService {
         }
 
         let packsById = try makeDictionary(items: models.batteryPacks.items, modelName: "batteryPacks") { dto in
+            let resolvedSpaceId = resolvedSpaceId(
+                candidate: dto.spaceId,
+                validSpaceIds: validSpaceIds,
+                fallbackSpaceId: defaultSpace.id
+            )
             let pack = BatteryPack(
+                spaceId: resolvedSpaceId,
                 batteryType: dto.batteryType,
                 purchaseDate: dto.purchaseDate,
                 batteriesPerPack: dto.batteriesPerPack,
@@ -174,8 +194,14 @@ struct BackupImportService {
                     id: dto.id
                 )
             }
+            let resolvedSpaceId = resolvedSpaceId(
+                candidate: dto.spaceId,
+                validSpaceIds: validSpaceIds,
+                fallbackSpaceId: defaultSpace.id
+            )
 
             let log = BatteryLog(
+                spaceId: resolvedSpaceId,
                 hearingAid: aid,
                 timestamp: dto.timestamp,
                 note: dto.note,
@@ -213,7 +239,13 @@ struct BackupImportService {
                     id: dto.id
                 )
             }
+            let resolvedSpaceId = resolvedSpaceId(
+                candidate: dto.spaceId,
+                validSpaceIds: validSpaceIds,
+                fallbackSpaceId: defaultSpace.id
+            )
             let issue = IssueLog(
+                spaceId: resolvedSpaceId,
                 hearingAid: aid,
                 timestamp: dto.timestamp,
                 issue: dto.issue,
@@ -305,7 +337,7 @@ struct BackupImportService {
     }
 
     private func validateModelVersion(_ version: Int, model: String) throws {
-        guard version == supportedVersion else {
+        guard version == supportedModelVersion else {
             throw BackupImportError.unsupportedModelVersion(model: model, version: version)
         }
     }
@@ -321,12 +353,58 @@ struct BackupImportService {
             throw BackupImportError.decodingFailed
         }
 
-        guard envelope.backupFormatVersion == supportedVersion else {
+        let normalizedVersion = normalizeFormatVersion(envelope.backupFormatVersion)
+        guard supportedFormatVersions.contains(normalizedVersion) else {
             throw BackupImportError.unsupportedBackupFormatVersion(envelope.backupFormatVersion)
         }
 
         try validateModelVersions(envelope.models)
         return envelope
+    }
+
+    private func normalizeFormatVersion(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    private func upsertSpaces(_ spaces: [SpaceDTO_v1], context: ModelContext) throws -> Space {
+        let existingSpaces = try context.fetch(FetchDescriptor<Space>())
+        var existingById: [UUID: Space] = Dictionary(uniqueKeysWithValues: existingSpaces.map { ($0.id, $0) })
+
+        for dto in spaces {
+            if let existing = existingById[dto.id] {
+                existing.name = dto.name
+                existing.roleHint = dto.roleHint
+                existing.createdAt = dto.createdAt
+            } else {
+                let created = Space(
+                    id: dto.id,
+                    name: dto.name,
+                    roleHint: dto.roleHint,
+                    createdAt: dto.createdAt
+                )
+                context.insert(created)
+                existingById[created.id] = created
+            }
+        }
+
+        if let defaultSpace = existingById[Space.defaultSpaceId] {
+            return defaultSpace
+        }
+
+        let createdDefault = Space.makeDefaultSpace()
+        context.insert(createdDefault)
+        return createdDefault
+    }
+
+    private func resolvedSpaceId(
+        candidate: UUID?,
+        validSpaceIds: Set<UUID>,
+        fallbackSpaceId: UUID
+    ) -> UUID {
+        guard let candidate, validSpaceIds.contains(candidate) else {
+            return fallbackSpaceId
+        }
+        return candidate
     }
 }
 

@@ -9,15 +9,24 @@ import Foundation
 import SwiftData
 
 enum SpaceMigrationService {
-    static func runIfNeeded(container: ModelContainer) throws {
+    static func runIfNeeded(container: ModelContainer) {
         let context = ModelContext(container)
         context.autosaveEnabled = false
 
-        let defaultSpace = try ensureDefaultSpace(in: context)
-        try backfillRecords(in: context, defaultSpaceId: defaultSpace.id)
+        do {
+            let defaultSpace = try ensureDefaultSpace(in: context)
+            try backfillRecords(in: context, defaultSpaceId: defaultSpace.id)
 
-        if context.hasChanges {
-            try context.save()
+            if context.hasChanges {
+                try context.save()
+            }
+        } catch {
+            let message = "Space migration failed: \(error)"
+            print(message)
+            UserDefaults.standard.set(message, forKey: "spaceMigration.v1.lastError")
+#if DEBUG
+            assertionFailure(message)
+#endif
         }
     }
 
