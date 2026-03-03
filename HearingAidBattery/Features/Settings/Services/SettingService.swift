@@ -21,10 +21,19 @@ struct DeleteAllDataSummary {
     }
 }
 
+struct DeleteCurrentSpaceResult {
+    let summary: DeleteAllDataSummary
+    let nextSpaceId: UUID?
+}
+
 @MainActor
 struct SettingService {
-    func deleteCurrentSpaceData(context: ModelContext) throws -> DeleteAllDataSummary {
+    func deleteCurrentSpaceData(context: ModelContext) throws -> DeleteCurrentSpaceResult {
         let activeSpaceId = SpaceService.currentSpaceId(context: context)
+        let currentSpace = try context.fetch(
+            FetchDescriptor<Space>(predicate: #Predicate<Space> { $0.id == activeSpaceId })
+        ).first
+
         let hearingAids = try context.fetch(
             FetchDescriptor<HearingAid>(predicate: #Predicate<HearingAid> { $0.spaceId == activeSpaceId })
         )
@@ -45,14 +54,25 @@ struct SettingService {
         )
         for item in logs { context.delete(item) }
 
+        if let currentSpace {
+            context.delete(currentSpace)
+        }
+
         try context.save()
-        return DeleteAllDataSummary(
-            spaces: 0,
-            hearingAids: hearingAids.count,
-            batteryPacks: packs.count,
-            issueLogs: issues.count,
-            batteryLogs: logs.count,
-            notifications: 0
+        let remainingSpaces = try context.fetch(
+            FetchDescriptor<Space>(sortBy: [SortDescriptor(\Space.createdAt, order: .forward)])
+        )
+
+        return DeleteCurrentSpaceResult(
+            summary: DeleteAllDataSummary(
+                spaces: currentSpace == nil ? 0 : 1,
+                hearingAids: hearingAids.count,
+                batteryPacks: packs.count,
+                issueLogs: issues.count,
+                batteryLogs: logs.count,
+                notifications: 0
+            ),
+            nextSpaceId: remainingSpaces.first?.id
         )
     }
 

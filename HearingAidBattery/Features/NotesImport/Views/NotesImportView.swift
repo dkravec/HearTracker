@@ -22,8 +22,9 @@ struct NotesImportView: View {
     }
 
     @Environment(\.modelContext) private var context
-    @Query private var hearingAids: [HearingAid]
 
+    @State private var activeAids: [HearingAid] = []
+    @State private var hasLoaded: Bool = false
     @State private var rawInput: String = ""
     @State private var selectedHearingAidId: UUID?
     @State private var previewItems: [NotesImportPreviewItem] = []
@@ -36,19 +37,6 @@ struct NotesImportView: View {
 
     private let parser = NotesImportParserService()
     private let commitService = NotesImportCommitService()
-
-    init() {
-        let activeSpaceId = SpaceService.activeSpaceIdForQueries
-        _hearingAids = Query(
-            filter: #Predicate<HearingAid> { $0.spaceId == activeSpaceId },
-            sort: \HearingAid.createdAt,
-            order: .reverse
-        )
-    }
-
-    private var activeAids: [HearingAid] {
-        hearingAids.filter { !$0.retired }
-    }
 
     private var reviewItems: [NotesImportPreviewItem] {
         previewItems.filter { needsReview($0) }
@@ -207,6 +195,9 @@ struct NotesImportView: View {
         .navigationTitle("Notes Import")
         .navigationBarTitleDisplayMode(.inline)
         .appBackground()
+        .onAppear {
+            loadData()
+        }
         .alert("Import Result", isPresented: Binding(
             get: { commitMessage != nil },
             set: { newValue in
@@ -217,6 +208,17 @@ struct NotesImportView: View {
         } message: {
             Text(commitMessage ?? "")
         }
+    }
+
+    private func loadData() {
+        guard hasLoaded == false else { return }
+        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        let descriptor = FetchDescriptor<HearingAid>(
+            predicate: #Predicate<HearingAid> { $0.spaceId == activeSpaceId && $0.retired == false },
+            sortBy: [SortDescriptor(\HearingAid.createdAt, order: .reverse)]
+        )
+        activeAids = (try? context.fetch(descriptor)) ?? []
+        hasLoaded = true
     }
 
     private var selectedHearingAid: HearingAid? {

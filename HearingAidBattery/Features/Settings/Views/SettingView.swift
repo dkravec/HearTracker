@@ -23,12 +23,17 @@ struct SettingView: View {
     @State private var showsDeleteLogsSheet: Bool = false
     @State private var showsDeleteLogsAlert: Bool = false
     @State private var showsImportBackupAlert: Bool = false
+    @State private var showsImportModeDialog: Bool = false
+    @State private var showsImportSpaceMappingSheet: Bool = false
     @State private var showsImportConflictResolver: Bool = false
     @State private var showsFileImporter: Bool = false
     @State private var showsFileExporter: Bool = false
     @State private var showsSpaceSwitcher: Bool = false
     @State private var pendingDeleteLogsAidId: UUID?
     @State private var pendingImportData: Data?
+    @State private var pendingImportSpaces: [SpaceDTO_v1] = []
+    @State private var importSpaceTargetSelection: [UUID: String] = [:]
+    @State private var pendingImportSpaceMode: BackupImportService.SpaceImportMode = .preserveBackupSpaces
     @State private var importConflictAnalysis: BackupIssueLinkConflictAnalysis?
     @State private var issueLinkResolutions: [UUID: UUID?] = [:]
     @State private var exportDocument: BackupJSONDocument?
@@ -55,13 +60,16 @@ struct SettingView: View {
                 SectionHeaderView(title: "General")
                 CardRowContainer {
                     VStack(alignment: .leading, spacing: 12) {
-                        settingsNavigationRow(
-                            title: "Notifications",
-                            subtitle: "General, alerts, and per-device toggles",
-                            systemImage: "bell.badge.fill"
-                        ) {
+                        NavigationLink {
                             HearingAidNotificationSettingsView()
+                        } label: {
+                            settingsRowLabel(
+                                title: "Notifications",
+                                subtitle: "General, alerts, and per-device toggles",
+                                systemImage: "bell.badge.fill"
+                            )
                         }
+                        .buttonStyle(.plain)
 
                         Divider()
 
@@ -91,13 +99,16 @@ struct SettingView: View {
                 SectionHeaderView(title: "Data")
                 CardRowContainer {
                     VStack(alignment: .leading, spacing: 12) {
-                        settingsNavigationRow(
-                            title: "Notes Import",
-                            subtitle: "Paste and preview note history",
-                            systemImage: "square.and.arrow.down.fill"
-                        ) {
+                        NavigationLink {
                             NotesImportView()
+                        } label: {
+                            settingsRowLabel(
+                                title: "Notes Import",
+                                subtitle: "Paste and preview note history",
+                                systemImage: "square.and.arrow.down.fill"
+                            )
                         }
+                        .buttonStyle(.plain)
 
                         Divider()
 
@@ -136,7 +147,7 @@ struct SettingView: View {
                         Button(role: .destructive) {
                             showsDeleteCurrentSpaceDataAlert = true
                         } label: {
-                            Label("Delete Current Space Data", systemImage: "trash")
+                            Label("Delete Current Space", systemImage: "trash")
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
@@ -157,36 +168,40 @@ struct SettingView: View {
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .appBackground()
-        .alert("Delete Current Space Data?", isPresented: $showsDeleteCurrentSpaceDataAlert) {
+        .alert("Delete Current Space?", isPresented: $showsDeleteCurrentSpaceDataAlert) {
             Button("Delete", role: .destructive) {
                 do {
-                    let summary = try settingService.deleteCurrentSpaceData(context: context)
-                    resultMessage = deleteAllSummaryText(summary)
-                    rescheduleNotifications()
+                    let result = try settingService.deleteCurrentSpaceData(context: context)
+                    resultMessage = deleteAllSummaryText(result.summary)
+
+                    if let nextSpaceId = result.nextSpaceId {
+                        activeSpaceSelection.setCurrentSpace(nextSpaceId, context: context)
+                    } else {
+                        resetOnboardingProgress()
+                    }
+                    rescheduleNotifications(refreshSpaceSelection: false)
                 } catch {
                     resultMessage = "Delete failed."
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes hearing aids, battery logs, packs, and issues in the current space only.")
+            Text("This removes this space and its hearing aids, battery logs, packs, and issues.")
         }
         .alert("Delete All Spaces Data?", isPresented: $showsDeleteAllDataAlert) {
             Button("Delete", role: .destructive) {
                 do {
                     let summary = try settingService.deleteAllData(context: context)
                     resultMessage = deleteAllSummaryText(summary)
-                    onboardingStepRaw = "name"
-                    onboardingSpaceIdString = ""
-                    onboardingCompleted = false
-                    rescheduleNotifications()
+                    resetOnboardingProgress()
+                    rescheduleNotifications(refreshSpaceSelection: false)
                 } catch {
                     resultMessage = "Delete failed."
                 }
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes all hearing aids, battery logs, packs, issues, and notification settings across all spaces.")
+            Text("This removes all spaces, hearing aids, battery logs, packs, issues, and notification settings.")
         }
         .alert("Import Backup?", isPresented: $showsImportBackupAlert) {
             Button("Import", role: .destructive) {
@@ -194,9 +209,35 @@ struct SettingView: View {
             }
             Button("Cancel", role: .cancel) {
                 pendingImportData = nil
+                pendingImportSpaces = []
+                importSpaceTargetSelection = [:]
+                pendingImportSpaceMode = .preserveBackupSpaces
             }
         } message: {
-            Text("This will replace all existing data.")
+            Text("This will replace all existing data.\nDestination: \(importDestinationText)")
+        }
+        .confirmationDialog("Import Destination", isPresented: $showsImportModeDialog, titleVisibility: .visible) {
+            Button("Import Into Current Space (\(currentSpaceName))", role: .destructive) {
+                pendingImportSpaceMode = .importIntoCurrentSpace(activeSpaceSelection.activeSpaceId)
+                presentImportBackupAlert()
+            }
+            Button("Map/Create Spaces") {
+                resetImportSpaceTargetSelection()
+                DispatchQueue.main.async {
+                    showsImportSpaceMappingSheet = true
+                }
+            }
+            Button("Preserve Backup Spaces (Auto)") {
+                pendingImportSpaceMode = .preserveBackupSpaces
+                presentImportBackupAlert()
+            }
+            Button("Cancel", role: .cancel) {
+                pendingImportData = nil
+                pendingImportSpaces = []
+                importSpaceTargetSelection = [:]
+            }
+        } message: {
+            Text("Choose how imported data should be assigned to spaces.")
         }
         .sheet(isPresented: $showsDeleteLogsSheet) {
             NavigationStack {
@@ -290,11 +331,39 @@ struct SettingView: View {
                     resultMessage = "Import failed."
                     return
                 }
-                pendingImportData = data
-                showsImportBackupAlert = true
+                do {
+                    pendingImportSpaces = try backupImportService.previewSpaces(in: data)
+                    pendingImportData = data
+                    showsImportModeDialog = true
+                } catch let error as BackupImportService.BackupImportError {
+                    setImportFailureMessage(error)
+                } catch {
+                    resultMessage = "Import failed."
+                }
             case .failure:
                 resultMessage = "Import failed."
             }
+        }
+        .sheet(isPresented: $showsImportSpaceMappingSheet) {
+            ImportSpaceMappingSheet(
+                backupSpaces: pendingImportSpaces,
+                existingSpaces: spaces,
+                selections: $importSpaceTargetSelection,
+                onCancel: {
+                    showsImportSpaceMappingSheet = false
+                    pendingImportData = nil
+                    pendingImportSpaces = []
+                    importSpaceTargetSelection = [:]
+                },
+                onImport: {
+                    pendingImportSpaceMode = .map(buildImportSpaceMapping())
+                    showsImportSpaceMappingSheet = false
+                    presentImportBackupAlert()
+                }
+            )
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+            .appBackground()
         }
         .sheet(isPresented: $showsImportConflictResolver) {
             if let analysis = importConflictAnalysis {
@@ -305,6 +374,9 @@ struct SettingView: View {
                         onCancel: {
                             clearImportConflictState()
                             pendingImportData = nil
+                            pendingImportSpaces = []
+                            importSpaceTargetSelection = [:]
+                            pendingImportSpaceMode = .preserveBackupSpaces
                         },
                         onImport: {
                             performResolvedBackupImport()
@@ -382,6 +454,17 @@ struct SettingView: View {
         return resultMessage.lowercased().contains("failed") ? "Failed" : "Done"
     }
 
+    private var importDestinationText: String {
+        switch pendingImportSpaceMode {
+        case .preserveBackupSpaces:
+            return "Preserve backup spaces"
+        case .importIntoCurrentSpace:
+            return "Current space (\(currentSpaceName))"
+        case .map:
+            return "Mapped spaces"
+        }
+    }
+
     private func exportBackup() {
         do {
             let data = try backupExportService.exportJSONData(context: context)
@@ -404,7 +487,7 @@ struct SettingView: View {
                 return
             }
 
-            importBackupData(importData)
+            importBackupData(importData, spaceImportMode: pendingImportSpaceMode)
             clearImportConflictState()
         } catch let error as BackupImportService.BackupImportError {
             setImportFailureMessage(error)
@@ -414,13 +497,23 @@ struct SettingView: View {
             clearImportConflictState()
         }
         pendingImportData = nil
+        pendingImportSpaces = []
+        importSpaceTargetSelection = [:]
+        pendingImportSpaceMode = .preserveBackupSpaces
     }
 
     private func performResolvedBackupImport() {
         guard let importData = pendingImportData else { return }
-        importBackupData(importData, issueLogLinkedBatteryLogOverrides: issueLinkResolutions)
+        importBackupData(
+            importData,
+            issueLogLinkedBatteryLogOverrides: issueLinkResolutions,
+            spaceImportMode: pendingImportSpaceMode
+        )
         clearImportConflictState()
         pendingImportData = nil
+        pendingImportSpaces = []
+        importSpaceTargetSelection = [:]
+        pendingImportSpaceMode = .preserveBackupSpaces
     }
 
     private func timestampForFilename() -> String {
@@ -461,13 +554,15 @@ struct SettingView: View {
 
     private func importBackupData(
         _ data: Data,
-        issueLogLinkedBatteryLogOverrides: [UUID: UUID?] = [:]
+        issueLogLinkedBatteryLogOverrides: [UUID: UUID?] = [:],
+        spaceImportMode: BackupImportService.SpaceImportMode = .preserveBackupSpaces
     ) {
         do {
             let summary = try backupImportService.importJSONData(
                 data,
                 context: context,
-                issueLogLinkedBatteryLogOverrides: issueLogLinkedBatteryLogOverrides
+                issueLogLinkedBatteryLogOverrides: issueLogLinkedBatteryLogOverrides,
+                spaceImportMode: spaceImportMode
             )
             resultMessage = importSummaryText(summary)
             rescheduleNotifications()
@@ -499,8 +594,51 @@ struct SettingView: View {
         }
     }
 
-    private func rescheduleNotifications() {
-        activeSpaceSelection.refresh(context: context)
+    private func resetOnboardingProgress() {
+        onboardingStepRaw = "name"
+        onboardingSpaceIdString = ""
+        onboardingCompleted = false
+    }
+
+    private func presentImportBackupAlert() {
+        DispatchQueue.main.async {
+            showsImportBackupAlert = true
+        }
+    }
+
+    private func resetImportSpaceTargetSelection() {
+        var defaults: [UUID: String] = [:]
+        for source in pendingImportSpaces {
+            if spaces.contains(where: { $0.id == source.id }) {
+                defaults[source.id] = source.id.uuidString
+            } else {
+                defaults[source.id] = ImportSpaceMappingSheet.createToken
+            }
+        }
+        importSpaceTargetSelection = defaults
+    }
+
+    private func buildImportSpaceMapping() -> [UUID: BackupImportService.SpaceTarget] {
+        var mapping: [UUID: BackupImportService.SpaceTarget] = [:]
+        for source in pendingImportSpaces {
+            let selection = importSpaceTargetSelection[source.id] ?? ImportSpaceMappingSheet.createToken
+            if let targetId = UUID(uuidString: selection) {
+                mapping[source.id] = .existing(targetId)
+            } else {
+                mapping[source.id] = .create(
+                    name: source.name,
+                    roleHint: source.roleHint,
+                    createdAt: source.createdAt
+                )
+            }
+        }
+        return mapping
+    }
+
+    private func rescheduleNotifications(refreshSpaceSelection: Bool = true) {
+        if refreshSpaceSelection {
+            activeSpaceSelection.refresh(context: context)
+        }
         Task {
             await notificationService.rescheduleAll(context: context)
         }
@@ -518,17 +656,6 @@ struct SettingView: View {
         .buttonStyle(.plain)
     }
 
-    private func settingsNavigationRow<Destination: View>(
-        title: String,
-        subtitle: String,
-        systemImage: String,
-        @ViewBuilder destination: @escaping () -> Destination
-    ) -> some View {
-        NavigationLink(destination: destination) {
-            settingsRowLabel(title: title, subtitle: subtitle, systemImage: systemImage)
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 private struct SpaceSwitcherSheet: View {
@@ -639,235 +766,64 @@ private struct SpaceSwitcherSheet: View {
     }
 }
 
-struct HearingAidNotificationSettingsView: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \NotificationModel.createdAt, order: .forward) private var notificationModels: [NotificationModel]
-    @Query private var hearingAids: [HearingAid]
+private struct ImportSpaceMappingSheet: View {
+    static let createToken = "create-new-space"
 
-    @State private var notificationsEnabled: Bool = false
-    @State private var expectedDeathWarningEnabled: Bool = true
-    @State private var expectedDeathWarningHours: Int = 1
-    @State private var expectedDeathWarningMinutes: Int = 0
-    @State private var morningHeadsUpEnabled: Bool = true
-    @State private var morningTime: Date = Date()
-    @State private var hasLoadedSettings: Bool = false
-    @State private var showsNotificationsPermissionAlert: Bool = false
-
-    private let notificationService = NotificationService()
-
-    init() {
-        let activeSpaceId = SpaceService.activeSpaceIdForQueries
-        _hearingAids = Query(
-            filter: #Predicate<HearingAid> { $0.spaceId == activeSpaceId },
-            sort: \HearingAid.createdAt,
-            order: .reverse
-        )
-    }
+    let backupSpaces: [SpaceDTO_v1]
+    let existingSpaces: [Space]
+    @Binding var selections: [UUID: String]
+    let onCancel: () -> Void
+    let onImport: () -> Void
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 12) {
-                SectionHeaderView(title: "General")
-                CardRowContainer {
-                    Toggle(isOn: $notificationsEnabled) {
-                        Label("Enable Notifications", systemImage: "bell.badge.fill")
-                            .font(.headline)
+        NavigationStack {
+            List {
+                if backupSpaces.isEmpty {
+                    Section {
+                        Text("No spaces found in this backup.")
+                            .foregroundStyle(.secondary)
                     }
-                }
-
-                if notificationsEnabled {
-                    SectionHeaderView(title: "Alerts")
-                    CardRowContainer {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Toggle(isOn: $expectedDeathWarningEnabled) {
-                                Label("Expected Death Warning", systemImage: "clock.badge.exclamationmark.fill")
+                } else {
+                    Section("Map Backup Spaces") {
+                        ForEach(backupSpaces, id: \.id) { source in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(source.name)
                                     .font(.headline)
-                            }
-
-                            if expectedDeathWarningEnabled {
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Hours")
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
-                                        Picker("Hours", selection: $expectedDeathWarningHours) {
-                                            ForEach(0..<49, id: \.self) { hour in
-                                                Text("\(hour)").tag(hour)
-                                            }
-                                        }
-                                        .pickerStyle(.wheel)
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 120)
-                                        .clipped()
-                                    }
-
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Minutes")
-                                            .font(.footnote)
-                                            .foregroundStyle(.secondary)
-                                        Picker("Minutes", selection: $expectedDeathWarningMinutes) {
-                                            ForEach(0..<60, id: \.self) { minute in
-                                                Text("\(minute)").tag(minute)
-                                            }
-                                        }
-                                        .pickerStyle(.wheel)
-                                        .frame(maxWidth: .infinity)
-                                        .frame(height: 120)
-                                        .clipped()
+                                Picker("Destination", selection: binding(for: source.id)) {
+                                    Text("Create New Space").tag(Self.createToken)
+                                    ForEach(existingSpaces, id: \.id) { existing in
+                                        Text(existing.name).tag(existing.id.uuidString)
                                     }
                                 }
+                                .pickerStyle(.menu)
                             }
-
-                            Divider()
-
-                            Toggle(isOn: $morningHeadsUpEnabled) {
-                                Label("Morning Heads-Up", systemImage: "sun.max.fill")
-                                    .font(.headline)
-                            }
-
-                            if morningHeadsUpEnabled {
-                                DatePicker(
-                                    "Morning Heads-Up Time",
-                                    selection: $morningTime,
-                                    displayedComponents: .hourAndMinute
-                                )
-                            }
-                        }
-                    }
-
-                    SectionHeaderView(title: "Per Hearing Aid")
-                    if activeAids.isEmpty {
-                        EmptyStateView(
-                            title: "No Hearing Aids",
-                            systemImage: FeatureSymbols.hearingAid,
-                            message: "Add a hearing aid to configure notification preferences."
-                        )
-                    } else {
-                        CardRowContainer {
-                            VStack(alignment: .leading, spacing: 12) {
-                                ForEach(activeAids) { aid in
-                                    Toggle(isOn: binding(for: aid)) {
-                                        Text(aid.name)
-                                            .font(.headline)
-                                    }
-
-                                    if aid.id != activeAids.last?.id {
-                                        Divider()
-                                    }
-                                }
-                            }
+                            .padding(.vertical, 4)
                         }
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-        }
-        .navigationTitle("Notification Preferences")
-        .navigationBarTitleDisplayMode(.inline)
-        .appBackground()
-        .onAppear {
-            loadSettings()
-        }
-        .onChange(of: notificationsEnabled) {
-            persistGeneralNotificationToggle()
-        }
-        .onChange(of: expectedDeathWarningEnabled) {
-            persistNotificationSettings()
-        }
-        .onChange(of: expectedDeathWarningHours) {
-            persistNotificationSettings()
-        }
-        .onChange(of: expectedDeathWarningMinutes) {
-            persistNotificationSettings()
-        }
-        .onChange(of: morningHeadsUpEnabled) {
-            persistNotificationSettings()
-        }
-        .onChange(of: morningTime) {
-            persistNotificationSettings()
-        }
-        .alert("Notifications Disabled", isPresented: $showsNotificationsPermissionAlert) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text("Enable notifications for HearTracker in the system Settings app, then try again.")
-        }
-    }
-
-    private var activeAids: [HearingAid] {
-        hearingAids.filter { !$0.retired }
-    }
-
-    private func loadSettings() {
-        let settings = notificationModels.first ?? notificationService.loadOrCreateSettings(context: context)
-        notificationsEnabled = settings.isEnabled
-        expectedDeathWarningEnabled = settings.isExpectedDeathWarningEnabled
-        expectedDeathWarningHours = settings.expectedDeathWarningHours
-        expectedDeathWarningMinutes = settings.expectedDeathWarningMinutes
-        morningHeadsUpEnabled = settings.isMorningHeadsUpEnabled
-        var components = DateComponents()
-        components.hour = settings.morningHour
-        components.minute = settings.morningMinute
-        morningTime = Calendar.current.date(from: components) ?? Date()
-        hasLoadedSettings = true
-    }
-
-    private func persistGeneralNotificationToggle() {
-        guard hasLoadedSettings else { return }
-        if notificationsEnabled == false {
-            persistNotificationSettings()
-            return
-        }
-
-        Task {
-            let granted = await notificationService.requestPermissionIfNeeded()
-            guard granted else {
-                notificationsEnabled = false
-                persistNotificationSettings()
-                showsNotificationsPermissionAlert = true
-                return
-            }
-            persistNotificationSettings()
-        }
-    }
-
-    private func persistNotificationSettings() {
-        guard hasLoadedSettings else { return }
-        var warningHours = expectedDeathWarningHours
-        var warningMinutes = expectedDeathWarningMinutes
-        if expectedDeathWarningEnabled, warningHours == 0, warningMinutes == 0 {
-            warningHours = 1
-            warningMinutes = 0
-            expectedDeathWarningHours = warningHours
-            expectedDeathWarningMinutes = warningMinutes
-        }
-
-        let components = Calendar.current.dateComponents([.hour, .minute], from: morningTime)
-        notificationService.saveSettings(
-            isEnabled: notificationsEnabled,
-            isExpectedDeathWarningEnabled: expectedDeathWarningEnabled,
-            expectedDeathWarningHours: warningHours,
-            expectedDeathWarningMinutes: warningMinutes,
-            isMorningHeadsUpEnabled: morningHeadsUpEnabled,
-            morningHour: components.hour ?? 8,
-            morningMinute: components.minute ?? 0,
-            context: context
-        )
-        Task {
-            await notificationService.rescheduleAll(context: context)
-        }
-    }
-
-    private func binding(for hearingAid: HearingAid) -> Binding<Bool> {
-        Binding<Bool>(
-            get: { hearingAid.notificationsEnabled },
-            set: { isEnabled in
-                hearingAid.notificationsEnabled = isEnabled
-                try? context.save()
-                Task {
-                    await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+            .navigationTitle("Import Space Mapping")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Import") {
+                        onImport()
+                    }
+                    .disabled(backupSpaces.isEmpty)
                 }
             }
+        }
+    }
+
+    private func binding(for sourceSpaceId: UUID) -> Binding<String> {
+        Binding(
+            get: { selections[sourceSpaceId] ?? Self.createToken },
+            set: { selections[sourceSpaceId] = $0 }
         )
     }
 }

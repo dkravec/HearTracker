@@ -26,16 +26,16 @@ final class NotificationService {
     }
 
     func loadOrCreateSettings(context: ModelContext) -> NotificationModel {
-        let descriptor = FetchDescriptor<NotificationModel>(
+        var descriptor = FetchDescriptor<NotificationModel>(
             sortBy: [SortDescriptor(\NotificationModel.createdAt, order: .forward)]
         )
+        descriptor.fetchLimit = 1
         if let existing = try? context.fetch(descriptor), let first = existing.first {
             return first
         }
 
         let created = NotificationModel()
         context.insert(created)
-        try? context.save()
         return created
     }
 
