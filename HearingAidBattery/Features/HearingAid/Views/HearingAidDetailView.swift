@@ -215,6 +215,7 @@ struct HearingAidDetailView: View {
                 note: $viewModel.logNote,
                 timestamp: $viewModel.logTimestamp,
                 selectedPackId: $viewModel.selectedPackId,
+                selectedLotId: $viewModel.selectedLotId,
                 availablePacks: availablePacks,
                 onSave: { timestamp, note in
                     viewModel.saveLog(for: aid, timestamp: timestamp, note: note, context: context)

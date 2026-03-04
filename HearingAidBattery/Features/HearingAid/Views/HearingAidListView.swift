@@ -82,12 +82,17 @@ struct HearingAidListView: View {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 12) {
                                     ForEach(activeAids) { aid in
-                                        HomeBatteryStatsCard(
-                                            aid: aid,
-                                            packs: packs,
-                                            durationFormatter: durationFormatter,
-                                            targetCurrency: mostRecentCurrencyCode
-                                        )
+                                        NavigationLink {
+                                            BatteryStatsDetailView(aid: aid)
+                                        } label: {
+                                            HomeBatteryStatsCard(
+                                                aid: aid,
+                                                packs: packs,
+                                                durationFormatter: durationFormatter,
+                                                targetCurrency: mostRecentCurrencyCode
+                                            )
+                                        }
+                                        .buttonStyle(.plain)
                                     }
                                 }
                                 .padding(.horizontal, 16)
@@ -244,8 +249,9 @@ struct HearingAidListView: View {
                 availablePacks: activePacks,
                 packs: Array(packs),
                 defaultAidId: viewModel.aidNextToDie(from: activeAids, context: context)?.id ?? activeAids.first?.id,
-                onSaveBatteryLog: { aid, timestamp, note, packId in
+                onSaveBatteryLog: { aid, timestamp, note, packId, lotId in
                     viewModel.selectedPackId = packId
+                    viewModel.selectedLotId = lotId
                     viewModel.saveLog(for: aid, timestamp: timestamp, note: note, context: context)
                 },
                 onSavePack: { batteryType, brand, purchaseDate, batteriesPerPack, numberOfPacks, priceAmount, currencyCode in
@@ -271,6 +277,7 @@ struct HearingAidListView: View {
                     note: $viewModel.logNote,
                     timestamp: $viewModel.logTimestamp,
                     selectedPackId: $viewModel.selectedPackId,
+                    selectedLotId: $viewModel.selectedLotId,
                     availablePacks: activePacks,
                     onSave: { timestamp, note in
                         if let currentAid = viewModel.resolvedAid(from: hearingAids) {
@@ -373,15 +380,21 @@ private struct HomeBatteryStatsCard: View {
 
                     Spacer(minLength: 6)
 
-                    Text("\(snapshot.sampleCount) samples")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(Color.white.opacity(0.12))
-                        )
+                    HStack(spacing: 4) {
+                        Text("\(snapshot.sampleCount) samples")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.12))
+                    )
                 }
 
                 statRow(
@@ -456,13 +469,14 @@ private struct AddEntryChoiceSheet: View {
     let availablePacks: [BatteryPack]
     let packs: [BatteryPack]
     let defaultAidId: UUID?
-    let onSaveBatteryLog: (HearingAid, Date, String?, UUID?) -> Void
+    let onSaveBatteryLog: (HearingAid, Date, String?, UUID?, UUID?) -> Void
     let onSavePack: (String, String?, Date, Int, Int, Decimal?, String?) throws -> Void
     private let issueLogService = IssueLogService()
 
     @State private var logNote: String = ""
     @State private var logTimestamp: Date = Date()
     @State private var selectedPackId: UUID?
+    @State private var selectedLotId: UUID?
     @State private var selectedAidId: UUID?
 
     var body: some View {
@@ -475,10 +489,11 @@ private struct AddEntryChoiceSheet: View {
                                 note: $logNote,
                                 timestamp: $logTimestamp,
                                 selectedPackId: $selectedPackId,
+                                selectedLotId: $selectedLotId,
                                 availablePacks: availablePacks,
                                 onSave: { timestamp, note in
                                     if let aid = activeAids.first(where: { $0.id == selectedAidId }) ?? activeAids.first {
-                                        onSaveBatteryLog(aid, timestamp, note, selectedPackId)
+                                        onSaveBatteryLog(aid, timestamp, note, selectedPackId, selectedLotId)
                                     }
                                     dismiss()
                                 },

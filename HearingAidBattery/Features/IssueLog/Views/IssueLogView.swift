@@ -44,8 +44,6 @@ struct IssueLogListView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                SectionHeaderView(title: "Issue Logs")
-
                 if issues.isEmpty {
                     EmptyStateView(
                         title: "No Issues Logged",

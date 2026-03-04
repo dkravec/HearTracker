@@ -17,6 +17,7 @@ final class HearingAidListViewModel: ObservableObject {
     @Published var logTimestamp: Date = Date()
     @Published var showsInventoryWarning: Bool = false
     @Published var selectedPackId: UUID?
+    @Published var selectedLotId: UUID?
     @Published var errorMessage: String?
 
     private let hearingAidService: HearingAidService
@@ -59,6 +60,7 @@ final class HearingAidListViewModel: ObservableObject {
         logNote = ""
         logTimestamp = Date()
         selectedPackId = nil
+        selectedLotId = nil
         selectedLogAidId = hearingAid.id
         showsLogSheet = true
     }
@@ -67,6 +69,7 @@ final class HearingAidListViewModel: ObservableObject {
         logNote = ""
         logTimestamp = Date()
         selectedPackId = nil
+        selectedLotId = nil
         selectedLogAidId = nil
         showsLogSheet = false
     }
@@ -78,6 +81,7 @@ final class HearingAidListViewModel: ObservableObject {
                 timestamp: timestamp,
                 note: note,
                 selectedPackId: selectedPackId,
+                selectedLotId: selectedLotId,
                 context: context
             )
             errorMessage = nil

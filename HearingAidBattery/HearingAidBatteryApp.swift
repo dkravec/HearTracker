@@ -35,6 +35,7 @@ struct HearingAidBatteryApp: App {
             HearingAid.self,
             BatteryLog.self,
             BatteryPack.self,
+            BatteryPackLot.self,
             IssueLog.self,
             NotificationModel.self,
             BatteryTypeNotificationPreference.self,

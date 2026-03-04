@@ -596,8 +596,31 @@ struct BatteryPackDetailView: View {
     @State private var showsEditSheet: Bool = false
     @State private var showsDeleteConfirm: Bool = false
     @State private var errorMessage: String?
+    @State private var lotRenderNonce: UUID = UUID()
 
     private let batteryPackService = BatteryPackService()
+
+    private var availableLots: [BatteryPackLot] {
+        _ = lotRenderNonce
+        return (pack.lots ?? [])
+            .filter { $0.isMarkedLost == false && $0.quantityRemaining > 0 }
+            .sorted(by: { $0.sortIndex < $1.sortIndex })
+    }
+
+    private var openAvailableLots: [BatteryPackLot] {
+        availableLots
+            .filter { $0.openedAt != nil }
+            .sorted {
+                guard let left = $0.openedAt, let right = $1.openedAt else { return false }
+                return left < right
+            }
+    }
+
+    private var unopenedAvailableLots: [BatteryPackLot] {
+        availableLots
+            .filter { $0.openedAt == nil }
+            .sorted(by: { $0.sortIndex < $1.sortIndex })
+    }
 
     var body: some View {
         ScrollView {
@@ -622,45 +645,89 @@ struct BatteryPackDetailView: View {
                     }
                 }
 
-                CardRowContainer {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(pack.isDone ? "Pack Status" : "Use Batteries")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                        if pack.isDone == false {
+                if pack.isDone == false, openAvailableLots.isEmpty == false {
+                    SectionHeaderView(title: "Opened Packs")
+                    ForEach(openAvailableLots, id: \.id) { lot in
+                        CardRowContainer {
                             HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Pack \(lot.sortIndex + 1)")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(lotSubtitle(for: lot))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer(minLength: 8)
+
                                 Button {
-                                    do {
-                                        try batteryPackService.restoreOneBattery(in: pack, context: context)
-                                    } catch {
-                                        errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                                    }
+                                    adjustLot(lot, mode: .consume)
                                 } label: {
                                     Image(systemName: "minus")
                                         .font(.headline)
                                         .frame(width: 34, height: 34)
                                 }
-                                .buttonStyle(.bordered)
-                                .disabled(pack.quantityRemaining >= pack.quantityPurchased)
-
-                                Text("\(pack.quantityRemaining) remaining")
-                                    .font(.subheadline.weight(.semibold))
+                                .buttonStyle(.borderedProminent)
+                                .disabled(lot.quantityRemaining <= 0)
 
                                 Button {
-                                    do {
-                                        try batteryPackService.useBatteries(1, from: pack, context: context)
-                                    } catch {
-                                        errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                                    }
+                                    adjustLot(lot, mode: .restore)
                                 } label: {
                                     Image(systemName: "plus")
                                         .font(.headline)
                                         .frame(width: 34, height: 34)
                                 }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(pack.quantityRemaining <= 0)
+                                .buttonStyle(.bordered)
+                                .disabled(lot.quantityRemaining >= lot.quantityInitial)
                             }
                         }
+                    }
+                }
+
+                if pack.isDone == false, unopenedAvailableLots.isEmpty == false {
+                    SectionHeaderView(title: "Unopened Packs")
+                    ForEach(unopenedAvailableLots, id: \.id) { lot in
+                        CardRowContainer {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Pack \(lot.sortIndex + 1)")
+                                        .font(.subheadline.weight(.semibold))
+                                    Text(lotSubtitle(for: lot))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer(minLength: 8)
+
+                                Button {
+                                    adjustLot(lot, mode: .consume)
+                                } label: {
+                                    Image(systemName: "minus")
+                                        .font(.headline)
+                                        .frame(width: 34, height: 34)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(lot.quantityRemaining <= 0)
+
+                                Button {
+                                    adjustLot(lot, mode: .restore)
+                                } label: {
+                                    Image(systemName: "plus")
+                                        .font(.headline)
+                                        .frame(width: 34, height: 34)
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(true)
+                            }
+                        }
+                    }
+                }
+
+                CardRowContainer {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Pack Status")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
 
                         if pack.isDone {
                             HStack(spacing: 8) {
@@ -731,6 +798,9 @@ struct BatteryPackDetailView: View {
             Text("This action cannot be undone.")
         }
         .errorAlert(title: "Unable to Complete Action", message: $errorMessage)
+        .onAppear {
+            pack.ensureLotsIfNeeded()
+        }
     }
 
     private func markPackDone(markLost: Bool) {
@@ -746,6 +816,53 @@ struct BatteryPackDetailView: View {
             try batteryPackService.unmarkPackDone(pack, context: context)
         } catch {
             errorMessage = "Could not mark pack as active."
+        }
+    }
+
+    private func lotSubtitle(for lot: BatteryPackLot) -> String {
+        if let openedAt = lot.openedAt {
+            return "opened \(openedAt.formatted(date: .abbreviated, time: .shortened)) • \(lot.quantityRemaining) left"
+        }
+        return "unopened • \(lot.quantityRemaining) left"
+    }
+
+    private enum LotAdjustMode {
+        case consume
+        case restore
+    }
+
+    private func adjustLot(_ lot: BatteryPackLot, mode: LotAdjustMode) {
+        do {
+            pack.ensureLotsIfNeeded()
+            switch mode {
+            case .consume:
+                let consumed = pack.consumeFromSpecificLot(lotId: lot.id, count: 1)
+                var usedFallback = false
+                if consumed == 0, lot.quantityRemaining > 0 {
+                    lot.quantityRemaining -= 1
+                    if lot.openedAt == nil {
+                        lot.openedAt = Date()
+                    }
+                    pack.syncTotalsFromLots()
+                    usedFallback = true
+                }
+                guard consumed == 1 || usedFallback else {
+                    throw BatteryPackServiceError.usageExceedsAvailable
+                }
+            case .restore:
+                let restored = pack.restoreToSpecificLot(lotId: lot.id, count: 1)
+                if restored == 0, lot.quantityRemaining < lot.quantityInitial {
+                    lot.quantityRemaining += 1
+                    if lot.quantityRemaining >= lot.quantityInitial {
+                        lot.openedAt = nil
+                    }
+                    pack.syncTotalsFromLots()
+                }
+            }
+            try context.save()
+            lotRenderNonce = UUID()
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

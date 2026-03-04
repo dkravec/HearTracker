@@ -75,6 +75,7 @@ struct BatteryLogServiceTests {
             timestamp: Date(timeIntervalSince1970: 9_999),
             note: "  changed battery  ",
             selectedPackId: nil,
+            selectedLotId: nil,
             context: context
         )
 
@@ -106,6 +107,7 @@ struct BatteryLogServiceTests {
             timestamp: Date(),
             note: nil,
             selectedPackId: nil,
+            selectedLotId: nil,
             context: context
         )
 
@@ -141,6 +143,7 @@ struct BatteryLogServiceTests {
             timestamp: Date(),
             note: nil,
             selectedPackId: selected.id,
+            selectedLotId: nil,
             context: context
         )
 
@@ -178,6 +181,7 @@ struct BatteryLogServiceTests {
             timestamp: Date(timeIntervalSince1970: 10_000),
             note: nil,
             selectedPackId: matchingTypePack.id,
+            selectedLotId: nil,
             context: context
         )
         _ = try logService.quickLog(
@@ -185,6 +189,7 @@ struct BatteryLogServiceTests {
             timestamp: Date(timeIntervalSince1970: 11_000),
             note: nil,
             selectedPackId: nil,
+            selectedLotId: nil,
             context: context
         )
 
@@ -250,6 +255,69 @@ struct BatteryPackServiceTests {
         #expect(stats[0].currencyCode == "CAD")
         #expect(stats[1].currencyCode == "USD")
     }
+
+    @Test
+    func consumeUsesOpenedLotsFirstThenUnopened() {
+        let pack = BatteryPack(
+            batteryType: "312",
+            batteriesPerPack: 2,
+            numberOfPacks: 3
+        )
+        let oldOpened = BatteryPackLot(
+            sortIndex: 0,
+            quantityInitial: 2,
+            quantityRemaining: 1,
+            openedAt: Date(timeIntervalSince1970: 100)
+        )
+        let newOpened = BatteryPackLot(
+            sortIndex: 1,
+            quantityInitial: 2,
+            quantityRemaining: 2,
+            openedAt: Date(timeIntervalSince1970: 200)
+        )
+        let unopened = BatteryPackLot(
+            sortIndex: 2,
+            quantityInitial: 2,
+            quantityRemaining: 2
+        )
+        pack.lots = [oldOpened, newOpened, unopened]
+
+        let consumed = pack.consume(count: 3)
+
+        #expect(consumed == 3)
+        #expect(oldOpened.quantityRemaining == 0)
+        #expect(newOpened.quantityRemaining == 0)
+        #expect(unopened.quantityRemaining == 2)
+        #expect(pack.quantityRemaining == 2)
+    }
+
+    @Test
+    func restoreTargetsPreferredLotThenFallsBackToAutoOrder() {
+        let pack = BatteryPack(
+            batteryType: "312",
+            batteriesPerPack: 3,
+            numberOfPacks: 2
+        )
+        let opened = BatteryPackLot(
+            sortIndex: 0,
+            quantityInitial: 3,
+            quantityRemaining: 2,
+            openedAt: Date(timeIntervalSince1970: 500)
+        )
+        let unopened = BatteryPackLot(
+            sortIndex: 1,
+            quantityInitial: 3,
+            quantityRemaining: 1
+        )
+        pack.lots = [opened, unopened]
+
+        let restored = pack.restore(count: 3, toLotId: unopened.id)
+
+        #expect(restored == 3)
+        #expect(unopened.quantityRemaining == 3)
+        #expect(opened.quantityRemaining == 3)
+        #expect(pack.quantityRemaining == 6)
+    }
 }
 
 @MainActor
@@ -294,7 +362,7 @@ struct FormatterTests {
 
 private func testContainer() throws -> ModelContainer {
     try ModelContainer(
-        for: Schema([HearingAid.self, BatteryLog.self, BatteryPack.self, IssueLog.self]),
+        for: Schema([HearingAid.self, BatteryLog.self, BatteryPack.self, BatteryPackLot.self, IssueLog.self]),
         configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
     )
 }

@@ -68,6 +68,7 @@ final class BatteryPackService {
 
         pack.retailer = normalized.retailer
         pack.note = normalized.note
+        pack.ensureLotsIfNeeded()
 
         context.insert(pack)
         try context.save()
@@ -112,6 +113,9 @@ final class BatteryPackService {
         batteryPack.brand = normalized.brand
         batteryPack.retailer = normalized.retailer
         batteryPack.note = normalized.note
+        if (batteryPack.lots ?? []).isEmpty == false {
+            batteryPack.rebuildLotsForCurrentConfiguration()
+        }
 
         try context.save()
         NotificationService().resetFinalLowPackFlag(for: batteryPack.batteryType, context: context)
@@ -140,7 +144,11 @@ final class BatteryPackService {
             throw BatteryPackServiceError.usageExceedsAvailable
         }
 
-        applyUsage(count: normalizedCount, to: batteryPack)
+        batteryPack.ensureLotsIfNeeded()
+        let consumed = batteryPack.consume(count: normalizedCount, date: timestamp)
+        guard consumed == normalizedCount else {
+            throw BatteryPackServiceError.usageExceedsAvailable
+        }
         appendUsageNote(note, count: normalizedCount, timestamp: timestamp, to: batteryPack)
         try context.save()
     }
@@ -149,13 +157,14 @@ final class BatteryPackService {
         in batteryPack: BatteryPack,
         context: ModelContext
     ) throws {
-        guard batteryPack.quantityRemaining < batteryPack.quantityPurchased else { return }
-        batteryPack.quantityRemaining += 1
+        batteryPack.ensureLotsIfNeeded()
+        _ = batteryPack.restore(count: 1)
         try context.save()
     }
 
     func consumeOneBattery(
         selectedPackId: UUID?,
+        selectedLotId: UUID?,
         preferredBatteryType: String?,
         spaceId: UUID,
         context: ModelContext
@@ -186,7 +195,9 @@ final class BatteryPackService {
             return nil
         }
 
-        applyUsage(count: 1, to: packToConsume)
+        packToConsume.ensureLotsIfNeeded()
+        let consumed = packToConsume.consume(count: 1, fromLotId: selectedLotId)
+        guard consumed == 1 else { return nil }
         return packToConsume
     }
 
@@ -255,11 +266,6 @@ final class BatteryPackService {
 
     private func usedBatteries(for pack: BatteryPack) -> Int {
         max(0, pack.quantityPurchased - pack.quantityRemaining)
-    }
-
-    private func applyUsage(count: Int, to pack: BatteryPack) {
-        let used = usedBatteries(for: pack) + max(0, count)
-        pack.quantityRemaining = remainingBatteries(purchased: pack.quantityPurchased, used: used)
     }
 
     private func appendUsageNote(_ note: String?, count: Int, timestamp: Date, to pack: BatteryPack) {

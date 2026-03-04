@@ -15,6 +15,7 @@ protocol BatteryLogProviding {
         timestamp: Date,
         note: String?,
         selectedPackId: UUID?,
+        selectedLotId: UUID?,
         context: ModelContext
     ) throws -> Bool
     func updateLog(
@@ -38,6 +39,7 @@ final class BatteryLogService: BatteryLogProviding {
         timestamp: Date = Date(),
         note: String? = nil,
         selectedPackId: UUID? = nil,
+        selectedLotId: UUID? = nil,
         context: ModelContext
     ) throws -> Bool {
         let trimmedNote = note?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -50,6 +52,7 @@ final class BatteryLogService: BatteryLogProviding {
             ?? hearingAid.batteryType?.trimmingCharacters(in: .whitespacesAndNewlines)
         let consumedPack = batteryPackService.consumeOneBattery(
             selectedPackId: selectedPackId,
+            selectedLotId: selectedLotId,
             preferredBatteryType: selectedPackId == nil ? previousType : nil,
             spaceId: hearingAid.spaceId,
             context: context
@@ -130,7 +133,7 @@ final class BatteryLogService: BatteryLogProviding {
 
     private func restoreBatteries(count: Int, in pack: BatteryPack) {
         guard count > 0 else { return }
-        let restoredQuantity = min(pack.quantityPurchased, pack.quantityRemaining + count)
-        pack.quantityRemaining = max(0, restoredQuantity)
+        pack.ensureLotsIfNeeded()
+        _ = pack.restore(count: count)
     }
 }

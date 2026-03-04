@@ -120,6 +120,7 @@ struct HearingAidSectionView: View {
                     note: $viewModel.logNote,
                     timestamp: $viewModel.logTimestamp,
                     selectedPackId: $viewModel.selectedPackId,
+                    selectedLotId: $viewModel.selectedLotId,
                     availablePacks: availablePacks,
                     onSave: { timestamp, note in
                         if let currentAid = viewModel.resolvedAid(from: hearingAids) {

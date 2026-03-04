@@ -11,6 +11,7 @@ struct BatteryLogSheet: View {
     @Binding var note: String
     @Binding var timestamp: Date
     @Binding var selectedPackId: UUID?
+    @Binding var selectedLotId: UUID?
     let availablePacks: [BatteryPack]
     let onSave: (Date, String?) -> Void
     let onCancel: () -> Void
@@ -26,6 +27,7 @@ struct BatteryLogSheet: View {
         note: Binding<String>,
         timestamp: Binding<Date>,
         selectedPackId: Binding<UUID?>,
+        selectedLotId: Binding<UUID?>,
         availablePacks: [BatteryPack],
         onSave: @escaping (Date, String?) -> Void,
         onCancel: @escaping () -> Void,
@@ -36,6 +38,7 @@ struct BatteryLogSheet: View {
         self._note = note
         self._timestamp = timestamp
         self._selectedPackId = selectedPackId
+        self._selectedLotId = selectedLotId
         self.availablePacks = availablePacks
         self.onSave = onSave
         self.onCancel = onCancel
@@ -87,6 +90,26 @@ struct BatteryLogSheet: View {
                 Text("Auto Match uses the oldest non-empty pack matching this hearing aid's recent battery type.")
             }
 
+            if availableLotsForSelectedPack.isEmpty == false {
+                Section {
+                    Picker("Use Lot", selection: $selectedLotId) {
+                        Text("Auto Match (Best Option)").tag(UUID?.none)
+
+                        ForEach(openLotsForSelectedPack, id: \.id) { lot in
+                            Text(lotOptionLabel(for: lot, opened: true)).tag(Optional(lot.id))
+                        }
+
+                        ForEach(unopenedLotsForSelectedPack, id: \.id) { lot in
+                            Text(lotOptionLabel(for: lot, opened: false)).tag(Optional(lot.id))
+                        }
+                    }
+                } header: {
+                    Text("Pack Lot")
+                } footer: {
+                    Text("Auto Match (Best Option) chooses the best lot from this pack, preferring opened lots first.")
+                }
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Note (Optional)")
@@ -118,6 +141,9 @@ struct BatteryLogSheet: View {
                 .disabled(activeAids.count > 1 && selectedAidId == nil)
             }
         }
+        .onChange(of: selectedPackId) {
+            sanitizeSelectedLot()
+        }
     }
 
     private func packOptionLabel(for pack: BatteryPack) -> String {
@@ -126,5 +152,47 @@ struct BatteryLogSheet: View {
         let prefix = brand.map { "\($0) " } ?? ""
         let date = pack.purchaseDate.formatted(date: .abbreviated, time: .omitted)
         return "\(prefix)\(type) • \(pack.quantityRemaining) left • \(date)"
+    }
+
+    private var selectedPack: BatteryPack? {
+        guard let selectedPackId else { return nil }
+        return availablePacks.first(where: { $0.id == selectedPackId })
+    }
+
+    private var availableLotsForSelectedPack: [BatteryPackLot] {
+        guard let selectedPack else { return [] }
+        return (selectedPack.lots ?? [])
+            .filter { $0.isMarkedLost == false && $0.quantityRemaining > 0 }
+            .sorted(by: { $0.sortIndex < $1.sortIndex })
+    }
+
+    private var openLotsForSelectedPack: [BatteryPackLot] {
+        availableLotsForSelectedPack
+            .filter { $0.openedAt != nil }
+            .sorted {
+                guard let left = $0.openedAt, let right = $1.openedAt else { return false }
+                return left < right
+            }
+    }
+
+    private var unopenedLotsForSelectedPack: [BatteryPackLot] {
+        availableLotsForSelectedPack
+            .filter { $0.openedAt == nil }
+            .sorted(by: { $0.sortIndex < $1.sortIndex })
+    }
+
+    private func lotOptionLabel(for lot: BatteryPackLot, opened: Bool) -> String {
+        if opened, let openedAt = lot.openedAt {
+            return "Pack \(lot.sortIndex + 1) • opened \(openedAt.formatted(date: .abbreviated, time: .shortened)) • \(lot.quantityRemaining) left"
+        }
+        return "Pack \(lot.sortIndex + 1) • unopened • \(lot.quantityRemaining) left"
+    }
+
+    private func sanitizeSelectedLot() {
+        guard let selectedLotId else { return }
+        let lotStillAvailable = availableLotsForSelectedPack.contains(where: { $0.id == selectedLotId })
+        if lotStillAvailable == false {
+            self.selectedLotId = nil
+        }
     }
 }

@@ -142,13 +142,74 @@ Current log does not show duration.
 
 ---
 
-# Optional Enhancements (Not Required for MVP)
+# Implemented Features
 
-* Local notifications based on average battery life
-* Simple battery life statistics (average, min, max)
+## Core
+* **Battery Logging** – Log when batteries are opened/changed
+* **Multiple Hearing Aids** – Track left, right, backups independently
+* **Usage Prediction** – Average battery life and predicted death date
+* **iCloud Sync** – Automatic sync via CloudKit
+
+## Inventory & Cost
+* **Battery Packs** – Track inventory by type, quantity, purchase date
+* **Cost Tracking** – Cost per day calculation with multi-currency support
+* **Low Stock Alerts** – Notifications when packs run low
+
+## Issues & History
+* **Issue Logging** – Record problems (dead on arrival, unusual drain, feedback)
+* **Notes Import** – Import existing data from Notes/spreadsheets
+
+## Notifications
+* **Expected Death Warning** – Alert before battery dies (configurable hours/minutes)
+* **Morning Heads-Up** – Daily reminder at chosen time
+* **Per-Aid Toggles** – Enable/disable notifications per hearing aid
+
+## Organization
+* **Spaces** – Separate profiles for caregivers managing multiple people
+* **Backup/Export** – Import/export data
+
+---
+
+# Stats Enhancements (Proposed)
+
+## Current Stats (Home Page Cards)
+* Current age / Predicted death
+* Average duration (rolling 10-sample window)
+* Cost per day
+* Sample count
+
+## Proposed: Dedicated Stats View
+Tappable stats card → navigates to detailed stats screen:
+
+### Summary Section
+* All-time average vs. recent (last 10) average
+* Best/worst battery duration
+* Total batteries used
+* Total cost spent
+
+### History Chart (Mini Bar Chart)
+* Last 10-20 battery durations as bars
+* Horizontal line showing average
+* Tap bar → shows that log's details
+
+### Trends
+* Duration trend (improving/declining/stable)
+* Seasonal patterns (if enough data)
+* Per-aid comparison (side by side)
+
+### Cost Analysis
+* Cost per day over time
+* Cost per hearing aid
+* Monthly/yearly projections
+
+---
+
+# Future Enhancements
+
 * Apple Watch quick log button
 * CSV export
-* Pack tracking (how many batteries left)
+* Widgets (battery status, predicted death)
+* Siri shortcuts ("Log battery for left aid")
 
 ---
 
