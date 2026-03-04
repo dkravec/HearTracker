@@ -94,9 +94,10 @@ struct HearingAidListView: View {
                                         )
                                     }
                                 }
-                                .padding(.horizontal, 1)
+                                .padding(.horizontal, 16)
                                 .padding(.vertical, 2)
                             }
+                            .padding(.horizontal, -16)
                         }
 
                         NavigationLink {

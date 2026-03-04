@@ -212,6 +212,42 @@ final class NotificationService {
         }
     }
 
+    func notifyLowBatteryPacksIfNeeded(context: ModelContext, preferredPackId: UUID? = nil) async {
+        let settings = loadOrCreateSettings(context: context)
+        guard settings.isEnabled, settings.isLowBatteryPackWarningEnabled else { return }
+        guard await requestPermissionIfNeeded() else { return }
+
+        let threshold = max(1, settings.lowBatteryPackThreshold)
+        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        let descriptor = FetchDescriptor<BatteryPack>(
+            predicate: #Predicate<BatteryPack> {
+                $0.spaceId == activeSpaceId && $0.isDone == false && $0.quantityRemaining <= threshold
+            },
+            sortBy: [
+                SortDescriptor(\BatteryPack.quantityRemaining, order: .forward),
+                SortDescriptor(\BatteryPack.purchaseDate, order: .forward)
+            ]
+        )
+        let lowPacks = (try? context.fetch(descriptor)) ?? []
+        guard lowPacks.isEmpty == false else { return }
+
+        let targetPack = lowPacks.first(where: { $0.id == preferredPackId }) ?? lowPacks[0]
+
+        let content = UNMutableNotificationContent()
+        content.title = "Low Battery Pack"
+        content.body = "\(targetPack.batteryType) pack has \(targetPack.quantityRemaining) remaining (threshold: \(threshold))."
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let identifier = "notif.lowpack.\(targetPack.id.uuidString).\(Int(Date().timeIntervalSince1970))"
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        _ = await withCheckedContinuation { continuation in
+            notificationCenter.add(request) { _ in
+                continuation.resume()
+            }
+        }
+    }
+
     private func nextMorningDate(hour: Int, minute: Int, now: Date) -> Date? {
         var components = Calendar.current.dateComponents([.year, .month, .day], from: now)
         components.hour = hour

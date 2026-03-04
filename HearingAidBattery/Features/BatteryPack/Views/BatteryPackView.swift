@@ -440,6 +440,7 @@ struct AddBatteryPackSheet: View {
         .scrollContentBackground(.hidden)
         .appBackground()
         .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Cancel") {
@@ -841,6 +842,7 @@ struct UseBatteriesSheet: View {
             .scrollContentBackground(.hidden)
             .appBackground()
             .navigationTitle("Use Batteries")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {

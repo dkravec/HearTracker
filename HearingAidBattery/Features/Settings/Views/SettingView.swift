@@ -21,6 +21,7 @@ struct SettingView: View {
     @State private var showsDeleteCurrentSpaceDataAlert: Bool = false
     @State private var showsDeleteAllDataAlert: Bool = false
     @State private var showsDeleteLogsSheet: Bool = false
+    @State private var showsTransferLogsSheet: Bool = false
     @State private var showsDeleteLogsAlert: Bool = false
     @State private var showsImportBackupAlert: Bool = false
     @State private var showsImportModeDialog: Bool = false
@@ -128,6 +129,16 @@ struct SettingView: View {
                             systemImage: "square.and.arrow.down.on.square.fill"
                         ) {
                             showsFileImporter = true
+                        }
+
+                        Divider()
+
+                        settingsActionRow(
+                            title: "Transfer Battery Logs",
+                            subtitle: "Move logs between hearing aids",
+                            systemImage: "arrow.left.arrow.right.circle.fill"
+                        ) {
+                            showsTransferLogsSheet = true
                         }
                     }
                 }
@@ -270,6 +281,31 @@ struct SettingView: View {
                 }
             }
             .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .appBackground()
+        }
+        .sheet(isPresented: $showsTransferLogsSheet) {
+            TransferBatteryLogsSheet(
+                hearingAids: activeAids,
+                onCancel: {
+                    showsTransferLogsSheet = false
+                },
+                onTransfer: { sourceId, targetId in
+                    do {
+                        let count = try settingService.transferBatteryLogs(
+                            from: sourceId,
+                            to: targetId,
+                            context: context
+                        )
+                        resultMessage = "Transferred \(count) battery logs."
+                        rescheduleNotifications()
+                    } catch {
+                        resultMessage = "Transfer failed."
+                    }
+                    showsTransferLogsSheet = false
+                }
+            )
+            .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
             .appBackground()
         }
@@ -763,6 +799,114 @@ private struct SpaceSwitcherSheet: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
+    }
+}
+
+private struct TransferBatteryLogsSheet: View {
+    let hearingAids: [HearingAid]
+    let onCancel: () -> Void
+    let onTransfer: (UUID, UUID) -> Void
+
+    @State private var sourceHearingAidId: UUID?
+    @State private var targetHearingAidId: UUID?
+
+    init(
+        hearingAids: [HearingAid],
+        onCancel: @escaping () -> Void,
+        onTransfer: @escaping (UUID, UUID) -> Void
+    ) {
+        self.hearingAids = hearingAids
+        self.onCancel = onCancel
+        self.onTransfer = onTransfer
+        let initialSourceId = hearingAids.first?.id
+        let initialTargetId = hearingAids.first(where: { $0.id != initialSourceId })?.id
+        _sourceHearingAidId = State(initialValue: initialSourceId)
+        _targetHearingAidId = State(initialValue: initialTargetId)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    SectionHeaderView(title: "Source")
+                    CardRowContainer {
+                        Picker("From Hearing Aid", selection: sourceSelection) {
+                            ForEach(hearingAids) { aid in
+                                Text(aid.name).tag(Optional(aid.id))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+
+                    SectionHeaderView(title: "Target")
+                    CardRowContainer {
+                        Picker("To Hearing Aid", selection: targetSelection) {
+                            ForEach(targetHearingAids) { aid in
+                                Text(aid.name).tag(Optional(aid.id))
+                            }
+                        }
+                        .pickerStyle(.menu)
+                    }
+
+                    CardRowContainer {
+                        Text("This moves battery logs to the selected hearing aid and keeps their notes, timestamps, battery pack links, and related linked issue-log references.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .screenContentPadding()
+            }
+            .navigationTitle("Transfer Battery Logs")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Transfer") {
+                        if let sourceHearingAidId, let targetHearingAidId {
+                            onTransfer(sourceHearingAidId, targetHearingAidId)
+                        }
+                    }
+                    .disabled(canTransfer == false)
+                }
+            }
+        }
+        .onChange(of: sourceHearingAidId) { _, newSourceId in
+            if targetHearingAidId == newSourceId {
+                targetHearingAidId = targetHearingAids.first?.id
+            }
+        }
+    }
+
+    private var targetHearingAids: [HearingAid] {
+        hearingAids.filter { $0.id != sourceHearingAidId }
+    }
+
+    private var canTransfer: Bool {
+        guard let sourceHearingAidId, let targetHearingAidId else { return false }
+        return sourceHearingAidId != targetHearingAidId
+    }
+
+    private var sourceSelection: Binding<UUID?> {
+        Binding(
+            get: { sourceHearingAidId },
+            set: { newValue in
+                sourceHearingAidId = newValue
+                if targetHearingAidId == nil {
+                    targetHearingAidId = hearingAids.first(where: { $0.id != newValue })?.id
+                }
+            }
+        )
+    }
+
+    private var targetSelection: Binding<UUID?> {
+        Binding(
+            get: { targetHearingAidId },
+            set: { targetHearingAidId = $0 }
+        )
     }
 }
 

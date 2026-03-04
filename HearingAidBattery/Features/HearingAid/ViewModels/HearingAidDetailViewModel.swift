@@ -157,6 +157,19 @@ final class HearingAidDetailViewModel: ObservableObject {
         }
     }
 
+    func deleteAllLogs(for hearingAidId: UUID, logs: [BatteryLog], context: ModelContext) {
+        guard logs.isEmpty == false else { return }
+        let offsets = IndexSet(integersIn: 0..<logs.count)
+        do {
+            try batteryLogService.deleteLogs(at: offsets, from: logs, context: context)
+            Task {
+                await notificationService.rescheduleNotifications(for: hearingAidId, context: context)
+            }
+        } catch {
+            errorMessage = "Could not remove battery logs."
+        }
+    }
+
     func beginLog() {
         errorMessage = nil
         logNote = ""
@@ -185,6 +198,10 @@ final class HearingAidDetailViewModel: ObservableObject {
             showsInventoryWarning = !consumedPack
             Task {
                 await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+                await notificationService.notifyLowBatteryPacksIfNeeded(
+                    context: context,
+                    preferredPackId: selectedPackId
+                )
             }
             endLog()
         } catch {

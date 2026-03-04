@@ -17,6 +17,7 @@ struct HearingAidNotificationSettingsView: View {
 
                     if settings.isEnabled {
                         alertsSection(settings: settings)
+                        batteryPackSection(settings: settings)
                         perAidSection()
                     }
                 } else {
@@ -131,6 +132,33 @@ struct HearingAidNotificationSettingsView: View {
     }
 
     @ViewBuilder
+    private func batteryPackSection(settings: NotificationModel) -> some View {
+        SectionHeaderView(title: "Battery Packs")
+        CardRowContainer {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: Binding(
+                    get: { settings.isLowBatteryPackWarningEnabled },
+                    set: { settings.isLowBatteryPackWarningEnabled = $0 }
+                )) {
+                    Label("Low Pack Warning", systemImage: "battery.25")
+                        .font(.headline)
+                }
+
+                if settings.isLowBatteryPackWarningEnabled {
+                    Stepper(
+                        "Notify at or below: \(settings.lowBatteryPackThreshold)",
+                        value: Binding(
+                            get: { max(1, settings.lowBatteryPackThreshold) },
+                            set: { settings.lowBatteryPackThreshold = max(1, $0) }
+                        ),
+                        in: 1...48
+                    )
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
     private func perAidSection() -> some View {
         SectionHeaderView(title: "Per Hearing Aid")
         if activeAids.isEmpty {
@@ -216,6 +244,10 @@ struct HearingAidNotificationSettingsView: View {
            settings.expectedDeathWarningHours == 0,
            settings.expectedDeathWarningMinutes == 0 {
             settings.expectedDeathWarningHours = 1
+        }
+
+        if settings.lowBatteryPackThreshold < 1 {
+            settings.lowBatteryPackThreshold = 1
         }
 
         try? context.save()

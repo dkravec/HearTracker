@@ -104,6 +104,7 @@ struct BatteryLogSheet: View {
         .scrollContentBackground(.hidden)
         .appBackground()
         .navigationTitle("New Battery Log")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
                 Button("Cancel") { onCancel() }

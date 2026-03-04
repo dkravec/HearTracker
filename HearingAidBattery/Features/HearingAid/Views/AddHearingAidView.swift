@@ -72,6 +72,7 @@ struct AddHearingAidView: View {
         .scrollContentBackground(.hidden)
         .appBackground()
         .navigationTitle("Add Hearing Aid")
+        .navigationBarTitleDisplayMode(.inline)
         .errorAlert(title: "Unable to Create Hearing Aid", message: $errorMessage)
     }
 }

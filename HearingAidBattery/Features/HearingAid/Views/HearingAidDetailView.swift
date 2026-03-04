@@ -20,6 +20,7 @@ struct HearingAidDetailView: View {
     @StateObject private var batteryStatusViewModel = BatteryStatusViewModel()
     @State private var logErrorMessage: String?
     @State private var selectedLogSelection: LogSelection?
+    @State private var showsDeleteLogsAlert: Bool = false
 
     private let batteryLogService: BatteryLogProviding = BatteryLogService()
     private static let durationFormatter = BatteryDurationFormatter()
@@ -92,17 +93,44 @@ struct HearingAidDetailView: View {
                 }
 
                 ForEach(Array(logs.enumerated()), id: \.element.id) { index, log in
-                    Button {
-                        selectedLogSelection = LogSelection(id: log.id)
-                    } label: {
-                        BatteryLogRow(log: log, rowModel: rowModel(for: index), showsChevron: true)
+                    let rowModel = rowModel(for: index)
+
+                    Group {
+                        if viewModel.isEditing {
+                            ZStack(alignment: .topTrailing) {
+                                BatteryLogRow(log: log, rowModel: rowModel, showsChevron: false)
+
+                                if rowModel.isCurrent == false {
+                                    Button(role: .destructive) {
+                                        viewModel.deleteLog(log, context: context)
+                                    } label: {
+                                        Image(systemName: "trash")
+                                            .font(.subheadline.weight(.semibold))
+                                            .padding(8)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .padding(.top, 6)
+                                    .padding(.trailing, 6)
+                                }
+                            }
+                        } else {
+                            Button {
+                                selectedLogSelection = LogSelection(id: log.id)
+                            } label: {
+                                BatteryLogRow(log: log, rowModel: rowModel, showsChevron: true)
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    .disabled(viewModel.isEditing)
                     .contextMenu {
                         if log.excludeFromStats == false {
                             Button("Exclude from averages") {
                                 viewModel.excludeFromAverages(log, hearingAidId: aid.id, context: context)
+                            }
+                        }
+                        if rowModel.isCurrent == false {
+                            Button("Delete Log", role: .destructive) {
+                                viewModel.deleteLog(log, context: context)
                             }
                         }
                     }
@@ -147,6 +175,14 @@ struct HearingAidDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This will delete the hearing aid and all its battery logs.")
+        }
+        .alert("Remove Battery Logs?", isPresented: $showsDeleteLogsAlert) {
+            Button("Remove", role: .destructive) {
+                viewModel.deleteAllLogs(for: aid.id, logs: logs, context: context)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes all battery logs for \(aid.name).")
         }
         .sheet(isPresented: $viewModel.showsLogSheet) {
             BatteryLogSheet(
@@ -302,6 +338,15 @@ struct HearingAidDetailView: View {
                 Divider()
 
                 Button(role: .destructive) {
+                    showsDeleteLogsAlert = true
+                } label: {
+                    Label("Remove Battery Logs", systemImage: "trash")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+                .disabled(logs.isEmpty)
+
+                Button(role: .destructive) {
                     viewModel.showsDeleteAlert = true
                 } label: {
                     Label("Delete Hearing Aid", systemImage: "trash")
@@ -346,12 +391,17 @@ struct HearingAidDetailView: View {
         }
     }
 
-    private var logsRefreshSignature: String {
-        logs
-            .map {
-                "\($0.id.uuidString)-\($0.timestamp.timeIntervalSince1970)-\($0.excludeFromStats)-\($0.excludePreviousGapFromStats)"
-            }
-            .joined(separator: "|")
+    private var logsRefreshSignature: UInt64 {
+        var token: UInt64 = UInt64(logs.count)
+        for log in logs {
+            var hasher = Hasher()
+            hasher.combine(log.id)
+            hasher.combine(log.timestamp.timeIntervalSince1970)
+            hasher.combine(log.excludeFromStats)
+            hasher.combine(log.excludePreviousGapFromStats)
+            token ^= UInt64(bitPattern: Int64(hasher.finalize()))
+        }
+        return token
     }
 
     private var availablePacks: [BatteryPack] {

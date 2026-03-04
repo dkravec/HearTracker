@@ -19,6 +19,8 @@ final class NotificationModel {
     var isMorningHeadsUpEnabled: Bool = true
     var morningHour: Int = 8
     var morningMinute: Int = 0
+    var isLowBatteryPackWarningEnabled: Bool = true
+    var lowBatteryPackThreshold: Int = 4
 
     init(
         isEnabled: Bool = false,
@@ -27,7 +29,9 @@ final class NotificationModel {
         expectedDeathWarningMinutes: Int = 0,
         isMorningHeadsUpEnabled: Bool = true,
         morningHour: Int = 8,
-        morningMinute: Int = 0
+        morningMinute: Int = 0,
+        isLowBatteryPackWarningEnabled: Bool = true,
+        lowBatteryPackThreshold: Int = 4
     ) {
         self.isEnabled = isEnabled
         self.isExpectedDeathWarningEnabled = isExpectedDeathWarningEnabled
@@ -36,5 +40,7 @@ final class NotificationModel {
         self.isMorningHeadsUpEnabled = isMorningHeadsUpEnabled
         self.morningHour = morningHour
         self.morningMinute = morningMinute
+        self.isLowBatteryPackWarningEnabled = isLowBatteryPackWarningEnabled
+        self.lowBatteryPackThreshold = max(1, lowBatteryPackThreshold)
     }
 }

@@ -517,6 +517,7 @@ struct AddIssueLogSheet: View {
             .scrollContentBackground(.hidden)
             .appBackground()
             .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {

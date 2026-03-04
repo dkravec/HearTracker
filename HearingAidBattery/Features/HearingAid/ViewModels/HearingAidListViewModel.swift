@@ -84,6 +84,10 @@ final class HearingAidListViewModel: ObservableObject {
             showsInventoryWarning = !consumedPack
             Task {
                 await notificationService.rescheduleNotifications(for: hearingAid.id, context: context)
+                await notificationService.notifyLowBatteryPacksIfNeeded(
+                    context: context,
+                    preferredPackId: selectedPackId
+                )
             }
             endLog()
         } catch {

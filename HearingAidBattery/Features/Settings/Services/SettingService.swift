@@ -138,4 +138,41 @@ struct SettingService {
         try context.save()
         return logs.count
     }
+
+    func transferBatteryLogs(from sourceHearingAidId: UUID, to targetHearingAidId: UUID, context: ModelContext) throws -> Int {
+        guard sourceHearingAidId != targetHearingAidId else { return 0 }
+
+        let activeSpaceId = SpaceService.currentSpaceId(context: context)
+        guard let targetHearingAid = try context.fetch(
+            FetchDescriptor<HearingAid>(
+                predicate: #Predicate<HearingAid> { $0.id == targetHearingAidId && $0.spaceId == activeSpaceId }
+            )
+        ).first else {
+            return 0
+        }
+
+        let logs = try context.fetch(
+            FetchDescriptor<BatteryLog>(
+                predicate: #Predicate<BatteryLog> { $0.hearingAid?.id == sourceHearingAidId && $0.spaceId == activeSpaceId }
+            )
+        )
+        guard logs.isEmpty == false else { return 0 }
+
+        let movedLogIds = Set(logs.map(\.id))
+        for log in logs {
+            log.hearingAid = targetHearingAid
+        }
+
+        let sourceIssues = try context.fetch(
+            FetchDescriptor<IssueLog>(
+                predicate: #Predicate<IssueLog> { $0.hearingAid?.id == sourceHearingAidId && $0.spaceId == activeSpaceId }
+            )
+        )
+        for issue in sourceIssues where issue.linkedBatteryLogId.map({ movedLogIds.contains($0) }) == true {
+            issue.hearingAid = targetHearingAid
+        }
+
+        try context.save()
+        return logs.count
+    }
 }
