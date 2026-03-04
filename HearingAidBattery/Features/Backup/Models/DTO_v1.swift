@@ -40,6 +40,18 @@ struct BatteryPackDTO_v1: Codable {
     let brand: String?
     let retailer: String?
     let note: String?
+    let lots: [BatteryPackLotDTO_v1]?
+}
+
+struct BatteryPackLotDTO_v1: Codable {
+    let id: UUID
+    let createdAt: Date
+    let sortIndex: Int
+    let openedAt: Date?
+    let quantityInitial: Int
+    let quantityRemaining: Int
+    let isMarkedLost: Bool
+    let note: String?
 }
 
 struct IssueLogDTO_v1: Codable {
@@ -78,4 +90,15 @@ struct NotificationDTO_v1: Codable {
     let isMorningHeadsUpEnabled: Bool?
     let morningHour: Int
     let morningMinute: Int
+    let isLowBatteryPackWarningEnabled: Bool?
+    let lowBatteryPackThreshold: Int?
+}
+
+struct BatteryTypeNotificationPreferenceDTO_v1: Codable {
+    let id: UUID
+    let createdAt: Date
+    let spaceId: UUID?
+    let batteryType: String
+    let notificationsOn: Bool
+    let sentFinal: Bool
 }

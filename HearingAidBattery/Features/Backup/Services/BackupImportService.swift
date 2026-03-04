@@ -7,6 +7,7 @@ struct BackupImportSummary {
     let batteryPacks: Int
     let issueLogs: Int
     let notifications: Int
+    let batteryTypeNotificationPreferences: Int
 }
 
 struct BackupIssueLinkConflictAnalysis {
@@ -54,7 +55,7 @@ struct BackupImportService {
     }
 
     private let supportedModelVersion = 1
-    private let supportedFormatVersions: Set<String> = ["1", "1.0", "1.1", "v1-1"]
+    private let supportedFormatVersions: Set<String> = ["1", "1.0", "1.1", "1.2", "v1-1", "v1-2"]
 
     func importJSONData(
         _ data: Data,
@@ -124,6 +125,10 @@ struct BackupImportService {
         try validateModelVersion(models.issueLogs.version, model: "issueLogs")
         try validateModelVersion(models.settings.version, model: "settings")
         try validateModelVersion(models.notifications.version, model: "notifications")
+        try validateModelVersion(
+            models.batteryTypeNotificationPreferences.version,
+            model: "batteryTypeNotificationPreferences"
+        )
     }
 
     private func replaceAllData(
@@ -145,12 +150,16 @@ struct BackupImportService {
         let currentIssues = try context.fetch(FetchDescriptor<IssueLog>())
         let currentPacks = try context.fetch(FetchDescriptor<BatteryPack>())
         let currentNotifications = try context.fetch(FetchDescriptor<NotificationModel>())
+        let currentBatteryTypeNotificationPreferences = try context.fetch(
+            FetchDescriptor<BatteryTypeNotificationPreference>()
+        )
         let currentAids = try context.fetch(FetchDescriptor<HearingAid>())
 
         for item in currentLogs { context.delete(item) }
         for item in currentIssues { context.delete(item) }
         for item in currentPacks { context.delete(item) }
         for item in currentNotifications { context.delete(item) }
+        for item in currentBatteryTypeNotificationPreferences { context.delete(item) }
         for item in currentAids { context.delete(item) }
 
         let aidsById = try makeDictionary(items: models.hearingAids.items, modelName: "hearingAids") { dto in
@@ -200,6 +209,25 @@ struct BackupImportService {
             pack.isMarkedLost = isMarkedLost
             pack.retailer = dto.retailer
             pack.note = dto.note
+            if let dtoLots = dto.lots, dtoLots.isEmpty == false {
+                pack.lots = dtoLots.sorted(by: { $0.sortIndex < $1.sortIndex }).map { lotDTO in
+                    let lot = BatteryPackLot(
+                        sortIndex: lotDTO.sortIndex,
+                        quantityInitial: lotDTO.quantityInitial,
+                        quantityRemaining: lotDTO.quantityRemaining,
+                        openedAt: lotDTO.openedAt,
+                        isMarkedLost: lotDTO.isMarkedLost,
+                        note: lotDTO.note
+                    )
+                    lot.id = lotDTO.id
+                    lot.createdAt = lotDTO.createdAt
+                    return lot
+                }
+                pack.syncTotalsFromLots()
+            } else {
+                // Backward compatibility: old backups had no lots, so rebuild from aggregate fields.
+                pack.ensureLotsIfNeeded()
+            }
             context.insert(pack)
             return pack
         }
@@ -317,11 +345,25 @@ struct BackupImportService {
                 expectedDeathWarningMinutes: dto.expectedDeathWarningMinutes ?? 0,
                 isMorningHeadsUpEnabled: dto.isMorningHeadsUpEnabled ?? true,
                 morningHour: dto.morningHour,
-                morningMinute: dto.morningMinute
+                morningMinute: dto.morningMinute,
+                isLowBatteryPackWarningEnabled: dto.isLowBatteryPackWarningEnabled ?? true,
+                lowBatteryPackThreshold: dto.lowBatteryPackThreshold ?? 4
             )
             notification.id = dto.id
             notification.createdAt = dto.createdAt
             context.insert(notification)
+        }
+
+        for dto in models.batteryTypeNotificationPreferences.items {
+            let pref = BatteryTypeNotificationPreference(
+                spaceId: dto.spaceId ?? Space.defaultSpaceId,
+                batteryType: dto.batteryType,
+                notificationsOn: dto.notificationsOn,
+                sentFinal: dto.sentFinal
+            )
+            pref.id = dto.id
+            pref.createdAt = dto.createdAt
+            context.insert(pref)
         }
 
         try context.save()
@@ -330,7 +372,8 @@ struct BackupImportService {
             batteryLogs: models.batteryLogs.items.count,
             batteryPacks: models.batteryPacks.items.count,
             issueLogs: models.issueLogs.items.count,
-            notifications: models.notifications.items.count
+            notifications: models.notifications.items.count,
+            batteryTypeNotificationPreferences: models.batteryTypeNotificationPreferences.items.count
         )
     }
 

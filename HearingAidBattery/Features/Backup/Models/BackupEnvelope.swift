@@ -9,6 +9,48 @@ struct BackupModels_v1: Codable {
     let issueLogs: ModelBlock<IssueLogDTO_v1>
     let settings: ModelBlock<SettingsDTO_v1>
     let notifications: ModelBlock<NotificationDTO_v1>
+    let batteryTypeNotificationPreferences: ModelBlock<BatteryTypeNotificationPreferenceDTO_v1>
+
+    private enum CodingKeys: String, CodingKey {
+        case hearingAids
+        case batteryLogs
+        case batteryPacks
+        case issueLogs
+        case settings
+        case notifications
+        case batteryTypeNotificationPreferences
+    }
+
+    init(
+        hearingAids: ModelBlock<HearingAidDTO_v1>,
+        batteryLogs: ModelBlock<BatteryLogDTO_v1>,
+        batteryPacks: ModelBlock<BatteryPackDTO_v1>,
+        issueLogs: ModelBlock<IssueLogDTO_v1>,
+        settings: ModelBlock<SettingsDTO_v1>,
+        notifications: ModelBlock<NotificationDTO_v1>,
+        batteryTypeNotificationPreferences: ModelBlock<BatteryTypeNotificationPreferenceDTO_v1> = ModelBlock(version: 1, items: [])
+    ) {
+        self.hearingAids = hearingAids
+        self.batteryLogs = batteryLogs
+        self.batteryPacks = batteryPacks
+        self.issueLogs = issueLogs
+        self.settings = settings
+        self.notifications = notifications
+        self.batteryTypeNotificationPreferences = batteryTypeNotificationPreferences
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hearingAids = try container.decode(ModelBlock<HearingAidDTO_v1>.self, forKey: .hearingAids)
+        batteryLogs = try container.decode(ModelBlock<BatteryLogDTO_v1>.self, forKey: .batteryLogs)
+        batteryPacks = try container.decode(ModelBlock<BatteryPackDTO_v1>.self, forKey: .batteryPacks)
+        issueLogs = try container.decode(ModelBlock<IssueLogDTO_v1>.self, forKey: .issueLogs)
+        settings = try container.decode(ModelBlock<SettingsDTO_v1>.self, forKey: .settings)
+        notifications = try container.decode(ModelBlock<NotificationDTO_v1>.self, forKey: .notifications)
+        batteryTypeNotificationPreferences =
+            try container.decodeIfPresent(ModelBlock<BatteryTypeNotificationPreferenceDTO_v1>.self, forKey: .batteryTypeNotificationPreferences)
+            ?? ModelBlock(version: 1, items: [])
+    }
 }
 
 struct BackupEnvelope: Codable {

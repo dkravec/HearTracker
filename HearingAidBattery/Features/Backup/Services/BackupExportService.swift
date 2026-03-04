@@ -4,7 +4,7 @@ import SwiftData
 @MainActor
 struct BackupExportService {
     private let modelVersion = 1
-    private let backupFormatVersion = "1.1"
+    private let backupFormatVersion = "1.2"
 
     func exportJSONData(context: ModelContext) throws -> Data {
         let spaces = try context.fetch(FetchDescriptor<Space>())
@@ -13,6 +13,7 @@ struct BackupExportService {
         let batteryPacks = try context.fetch(FetchDescriptor<BatteryPack>())
         let issueLogs = try context.fetch(FetchDescriptor<IssueLog>())
         let notifications = try context.fetch(FetchDescriptor<NotificationModel>())
+        let batteryTypeNotificationPreferences = try context.fetch(FetchDescriptor<BatteryTypeNotificationPreference>())
 
         let envelope = BackupEnvelope(
             backupFormatVersion: backupFormatVersion,
@@ -24,7 +25,11 @@ struct BackupExportService {
                 batteryPacks: ModelBlock(version: modelVersion, items: batteryPacks.map(dto)),
                 issueLogs: ModelBlock(version: modelVersion, items: issueLogs.map(dto)),
                 settings: ModelBlock(version: modelVersion, items: []),
-                notifications: ModelBlock(version: modelVersion, items: notifications.map(dto))
+                notifications: ModelBlock(version: modelVersion, items: notifications.map(dto)),
+                batteryTypeNotificationPreferences: ModelBlock(
+                    version: modelVersion,
+                    items: batteryTypeNotificationPreferences.map(dto)
+                )
             )
         )
 
@@ -78,7 +83,23 @@ struct BackupExportService {
             currencyCode: batteryPack.currencyCode,
             brand: batteryPack.brand,
             retailer: batteryPack.retailer,
-            note: batteryPack.note
+            note: batteryPack.note,
+            lots: (batteryPack.lots ?? [])
+                .sorted(by: { $0.sortIndex < $1.sortIndex })
+                .map(dto)
+        )
+    }
+
+    private func dto(_ lot: BatteryPackLot) -> BatteryPackLotDTO_v1 {
+        BatteryPackLotDTO_v1(
+            id: lot.id,
+            createdAt: lot.createdAt,
+            sortIndex: lot.sortIndex,
+            openedAt: lot.openedAt,
+            quantityInitial: lot.quantityInitial,
+            quantityRemaining: lot.quantityRemaining,
+            isMarkedLost: lot.isMarkedLost,
+            note: lot.note
         )
     }
 
@@ -108,7 +129,20 @@ struct BackupExportService {
             expectedDeathWarningMinutes: notification.expectedDeathWarningMinutes,
             isMorningHeadsUpEnabled: notification.isMorningHeadsUpEnabled,
             morningHour: notification.morningHour,
-            morningMinute: notification.morningMinute
+            morningMinute: notification.morningMinute,
+            isLowBatteryPackWarningEnabled: notification.isLowBatteryPackWarningEnabled,
+            lowBatteryPackThreshold: notification.lowBatteryPackThreshold
+        )
+    }
+
+    private func dto(_ pref: BatteryTypeNotificationPreference) -> BatteryTypeNotificationPreferenceDTO_v1 {
+        BatteryTypeNotificationPreferenceDTO_v1(
+            id: pref.id,
+            createdAt: pref.createdAt,
+            spaceId: pref.spaceId,
+            batteryType: pref.batteryType,
+            notificationsOn: pref.notificationsOn,
+            sentFinal: pref.sentFinal
         )
     }
 

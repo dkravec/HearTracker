@@ -648,78 +648,26 @@ struct BatteryPackDetailView: View {
                 if pack.isDone == false, openAvailableLots.isEmpty == false {
                     SectionHeaderView(title: "Opened Packs")
                     ForEach(openAvailableLots, id: \.id) { lot in
-                        CardRowContainer {
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Pack \(lot.sortIndex + 1)")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text(lotSubtitle(for: lot))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Spacer(minLength: 8)
-
-                                Button {
-                                    adjustLot(lot, mode: .consume)
-                                } label: {
-                                    Image(systemName: "minus")
-                                        .font(.headline)
-                                        .frame(width: 34, height: 34)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(lot.quantityRemaining <= 0)
-
-                                Button {
-                                    adjustLot(lot, mode: .restore)
-                                } label: {
-                                    Image(systemName: "plus")
-                                        .font(.headline)
-                                        .frame(width: 34, height: 34)
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(lot.quantityRemaining >= lot.quantityInitial)
-                            }
-                        }
+                        LotRowView(
+                            lot: lot,
+                            isOpened: true,
+                            onConsume: { adjustLot(lot, mode: .consume) },
+                            onRestore: { adjustLot(lot, mode: .restore) }
+                        )
+                        .id("\(lot.id)-\(lotRenderNonce)")
                     }
                 }
 
                 if pack.isDone == false, unopenedAvailableLots.isEmpty == false {
                     SectionHeaderView(title: "Unopened Packs")
                     ForEach(unopenedAvailableLots, id: \.id) { lot in
-                        CardRowContainer {
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Pack \(lot.sortIndex + 1)")
-                                        .font(.subheadline.weight(.semibold))
-                                    Text(lotSubtitle(for: lot))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                Spacer(minLength: 8)
-
-                                Button {
-                                    adjustLot(lot, mode: .consume)
-                                } label: {
-                                    Image(systemName: "minus")
-                                        .font(.headline)
-                                        .frame(width: 34, height: 34)
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .disabled(lot.quantityRemaining <= 0)
-
-                                Button {
-                                    adjustLot(lot, mode: .restore)
-                                } label: {
-                                    Image(systemName: "plus")
-                                        .font(.headline)
-                                        .frame(width: 34, height: 34)
-                                }
-                                .buttonStyle(.bordered)
-                                .disabled(true)
-                            }
-                        }
+                        LotRowView(
+                            lot: lot,
+                            isOpened: false,
+                            onConsume: { adjustLot(lot, mode: .consume) },
+                            onRestore: { adjustLot(lot, mode: .restore) }
+                        )
+                        .id("\(lot.id)-\(lotRenderNonce)")
                     }
                 }
 
@@ -819,13 +767,6 @@ struct BatteryPackDetailView: View {
         }
     }
 
-    private func lotSubtitle(for lot: BatteryPackLot) -> String {
-        if let openedAt = lot.openedAt {
-            return "opened \(openedAt.formatted(date: .abbreviated, time: .shortened)) • \(lot.quantityRemaining) left"
-        }
-        return "unopened • \(lot.quantityRemaining) left"
-    }
-
     private enum LotAdjustMode {
         case consume
         case restore
@@ -864,6 +805,56 @@ struct BatteryPackDetailView: View {
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
+    }
+}
+
+private struct LotRowView: View {
+    let lot: BatteryPackLot
+    let isOpened: Bool
+    let onConsume: () -> Void
+    let onRestore: () -> Void
+
+    var body: some View {
+        CardRowContainer {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Pack \(lot.sortIndex + 1)")
+                        .font(.subheadline.weight(.semibold))
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+
+                Button {
+                    onConsume()
+                } label: {
+                    Image(systemName: "minus")
+                        .font(.headline)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(lot.quantityRemaining <= 0)
+
+                Button {
+                    onRestore()
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.headline)
+                        .frame(width: 34, height: 34)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isOpened ? lot.quantityRemaining >= lot.quantityInitial : true)
+            }
+        }
+    }
+
+    private var subtitle: String {
+        if let openedAt = lot.openedAt {
+            return "opened \(openedAt.formatted(date: .abbreviated, time: .shortened)) • \(lot.quantityRemaining) left"
+        }
+        return "unopened • \(lot.quantityRemaining) left"
     }
 }
 
