@@ -215,21 +215,27 @@ struct BatteryLogDetailView: View {
                     }
                 }
             }
+
+            CardRowContainer {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Averages")
+                        .font(.headline)
+
+                    Toggle("Exclude this battery from averages", isOn: exclusionFromAverageBinding)
+                    Toggle("Forgot previous log (exclude previous gap)", isOn: exclusionPreviousGapBinding)
+                }
+            }
         }
     }
 
     // MARK: - Inline edit
 
     private var editSection: some View {
-        CardRowContainer {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Edit Battery Log")
-                    .font(.headline)
-
-                VStack(alignment: .leading, spacing: 6) {
+        Group {
+            CardRowContainer {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Timestamp")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.headline)
 
                     DatePicker(
                         "Logged At",
@@ -238,19 +244,27 @@ struct BatteryLogDetailView: View {
                     )
                     .labelsHidden()
                 }
+            }
 
-                VStack(alignment: .leading, spacing: 6) {
+            CardRowContainer {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("Note")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.headline)
 
                     TextField("Add a note (optional)", text: $draftNote, axis: .vertical)
                         .lineLimit(1...4)
                         .textFieldStyle(.roundedBorder)
                 }
+            }
 
-                Toggle("Exclude this battery from averages", isOn: $draftExcludeFromStats)
-                Toggle("Forgot previous log (exclude previous gap)", isOn: $draftExcludePreviousGapFromStats)
+            CardRowContainer {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Averages")
+                        .font(.headline)
+
+                    Toggle("Exclude this battery from averages", isOn: $draftExcludeFromStats)
+                    Toggle("Forgot previous log (exclude previous gap)", isOn: $draftExcludePreviousGapFromStats)
+                }
             }
         }
     }
@@ -269,5 +283,35 @@ struct BatteryLogDetailView: View {
         draftExcludeFromStats = log.excludeFromStats
         draftExcludePreviousGapFromStats = log.excludePreviousGapFromStats
         isEditing = false
+    }
+
+    private var exclusionFromAverageBinding: Binding<Bool> {
+        Binding(
+            get: { draftExcludeFromStats },
+            set: { newValue in
+                draftExcludeFromStats = newValue
+                onSave(
+                    log.timestamp,
+                    log.note,
+                    newValue,
+                    draftExcludePreviousGapFromStats
+                )
+            }
+        )
+    }
+
+    private var exclusionPreviousGapBinding: Binding<Bool> {
+        Binding(
+            get: { draftExcludePreviousGapFromStats },
+            set: { newValue in
+                draftExcludePreviousGapFromStats = newValue
+                onSave(
+                    log.timestamp,
+                    log.note,
+                    draftExcludeFromStats,
+                    newValue
+                )
+            }
+        )
     }
 }

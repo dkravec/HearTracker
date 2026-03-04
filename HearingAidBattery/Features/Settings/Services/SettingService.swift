@@ -54,6 +54,13 @@ struct SettingService {
         )
         for item in logs { context.delete(item) }
 
+        let batteryTypeNotificationPreferences = try context.fetch(
+            FetchDescriptor<BatteryTypeNotificationPreference>(
+                predicate: #Predicate<BatteryTypeNotificationPreference> { $0.spaceId == activeSpaceId }
+            )
+        )
+        for item in batteryTypeNotificationPreferences { context.delete(item) }
+
         if let currentSpace {
             context.delete(currentSpace)
         }
@@ -70,7 +77,7 @@ struct SettingService {
                 batteryPacks: packs.count,
                 issueLogs: issues.count,
                 batteryLogs: logs.count,
-                notifications: 0
+                notifications: batteryTypeNotificationPreferences.count
             ),
             nextSpaceId: remainingSpaces.first?.id
         )
@@ -95,6 +102,9 @@ struct SettingService {
         let notificationSettings = try context.fetch(FetchDescriptor<NotificationModel>())
         for item in notificationSettings { context.delete(item) }
 
+        let batteryTypeNotificationPreferences = try context.fetch(FetchDescriptor<BatteryTypeNotificationPreference>())
+        for item in batteryTypeNotificationPreferences { context.delete(item) }
+
         try context.save()
         return DeleteAllDataSummary(
             spaces: spaces.count,
@@ -102,7 +112,7 @@ struct SettingService {
             batteryPacks: packs.count,
             issueLogs: issues.count,
             batteryLogs: logs.count,
-            notifications: notificationSettings.count
+            notifications: notificationSettings.count + batteryTypeNotificationPreferences.count
         )
     }
 

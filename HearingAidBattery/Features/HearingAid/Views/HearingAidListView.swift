@@ -11,11 +11,11 @@ import SwiftData
 struct HearingAidListView: View {
     @Environment(\.modelContext) private var context
     @Query private var hearingAids: [HearingAid]
+    @Query private var logs: [BatteryLog]
     @Query private var packs: [BatteryPack]
     @Query private var issues: [IssueLog]
 
     @StateObject private var viewModel = HearingAidListViewModel()
-    private let statsService = BatteryStatsService()
     private let batteryPackService = BatteryPackService()
     private let issueLogService = IssueLogService()
     private let durationFormatter = BatteryDurationFormatter()
@@ -23,6 +23,7 @@ struct HearingAidListView: View {
 
     @State private var showsAddActions: Bool = false
     @State private var packPendingDelete: BatteryPack?
+    @State private var selectedAidRoute: HearingAidRoute?
 
     init() {
         let activeSpaceId = SpaceService.activeSpaceIdForQueries
@@ -34,6 +35,11 @@ struct HearingAidListView: View {
         _packs = Query(
             filter: #Predicate<BatteryPack> { $0.spaceId == activeSpaceId },
             sort: \BatteryPack.purchaseDate,
+            order: .reverse
+        )
+        _logs = Query(
+            filter: #Predicate<BatteryLog> { $0.spaceId == activeSpaceId },
+            sort: \BatteryLog.timestamp,
             order: .reverse
         )
         _issues = Query(
@@ -76,20 +82,10 @@ struct HearingAidListView: View {
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(spacing: 12) {
                                     ForEach(activeAids) { aid in
-                                        let snapshot = statsService.statsSnapshot(
-                                            for: aid.id,
-                                            windowSize: Self.statsWindowSize,
-                                            context: context
-                                        )
-                                        let costStats = batteryPackService.costStatsByCurrency(
-                                            from: packs,
-                                            averageDuration: snapshot.avgDuration
-                                        )
                                         HomeBatteryStatsCard(
-                                            aidName: aid.name,
-                                            snapshot: snapshot,
+                                            aid: aid,
+                                            packs: packs,
                                             durationFormatter: durationFormatter,
-                                            costStats: costStats,
                                             targetCurrency: mostRecentCurrencyCode
                                         )
                                     }
@@ -123,6 +119,10 @@ struct HearingAidListView: View {
                             ForEach(Array(activeAids.prefix(2))) { aid in
                                 HearingAidCardRow(
                                     aid: aid,
+                                    changesCount: changesCount(for: aid),
+                                    onOpenTapped: {
+                                        selectedAidRoute = HearingAidRoute(hearingAidId: aid.id, spaceId: aid.spaceId)
+                                    },
                                     onLogTapped: { viewModel.beginLog(for: aid) }
                                 )
                             }
@@ -213,6 +213,9 @@ struct HearingAidListView: View {
             .navigationTitle("HearTracker")
             .navigationDestination(for: BatteryLogRoute.self) { route in
                 BatteryLogDetailContainer(route: route)
+            }
+            .navigationDestination(item: $selectedAidRoute) { route in
+                HearingAidDetailContainer(route: route)
             }
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -323,6 +326,17 @@ struct HearingAidListView: View {
         }
     }
 
+    private var logCountsByAidId: [UUID: Int] {
+        logs.reduce(into: [:]) { counts, log in
+            guard let aidId = log.hearingAid?.id else { return }
+            counts[aidId, default: 0] += 1
+        }
+    }
+
+    private func changesCount(for aid: HearingAid) -> Int {
+        logCountsByAidId[aid.id, default: 0]
+    }
+
     /// The currency code from the most recently purchased pack, or the user's locale currency.
     private var mostRecentCurrencyCode: String {
         packs.first(where: { $0.currencyCode != nil })?.currencyCode?.uppercased()
@@ -331,13 +345,18 @@ struct HearingAidListView: View {
 }
 
 private struct HomeBatteryStatsCard: View {
-    let aidName: String
-    let snapshot: BatteryStatsSnapshot
+    @Environment(\.modelContext) private var context
+
+    let aid: HearingAid
+    let packs: [BatteryPack]
     let durationFormatter: BatteryDurationFormatter
-    let costStats: [BatteryPackCostStat]
     let targetCurrency: String
 
+    @State private var snapshot: BatteryStatsSnapshot = .empty
     @State private var costPerDaySummary: String = "Loading…"
+    private static let statsWindowSize: Int = 10
+    private let statsService = BatteryStatsService()
+    private let batteryPackService = BatteryPackService()
     private let currencyFormatter = CurrencyFormatter.shared
 
     var body: some View {
@@ -348,7 +367,7 @@ private struct HomeBatteryStatsCard: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    Text(aidName)
+                    Text(aid.name)
                         .font(.headline)
                         .lineLimit(1)
 
@@ -386,6 +405,16 @@ private struct HomeBatteryStatsCard: View {
             .frame(width: 245, height: 200, alignment: .topLeading)
         }
         .task {
+            let latestSnapshot = statsService.statsSnapshot(
+                for: aid.id,
+                windowSize: Self.statsWindowSize,
+                context: context
+            )
+            snapshot = latestSnapshot
+            let costStats = batteryPackService.costStatsByCurrency(
+                from: packs,
+                averageDuration: latestSnapshot.avgDuration
+            )
             costPerDaySummary = await currencyFormatter.costPerDaySummaryConverted(
                 from: costStats,
                 targetCurrency: targetCurrency

@@ -218,7 +218,9 @@ final class NotificationService {
         guard await requestPermissionIfNeeded() else { return }
 
         let threshold = max(1, settings.lowBatteryPackThreshold)
-        let activeSpaceId = SpaceService.activeSpaceIdForQueries
+        let activeSpaceId = SpaceService.currentSpaceId(context: context)
+        _ = ensureBatteryTypePreferences(context: context)
+
         let descriptor = FetchDescriptor<BatteryPack>(
             predicate: #Predicate<BatteryPack> {
                 $0.spaceId == activeSpaceId && $0.isDone == false && $0.quantityRemaining <= threshold
@@ -229,23 +231,134 @@ final class NotificationService {
             ]
         )
         let lowPacks = (try? context.fetch(descriptor)) ?? []
-        guard lowPacks.isEmpty == false else { return }
 
-        let targetPack = lowPacks.first(where: { $0.id == preferredPackId }) ?? lowPacks[0]
+        let prefs = fetchBatteryTypePreferences(spaceId: activeSpaceId, context: context)
+        var prefsByType: [String: BatteryTypeNotificationPreference] = [:]
+        for pref in prefs {
+            prefsByType[normalizedBatteryType(pref.batteryType)] = pref
+        }
 
+        var packsByType: [String: [BatteryPack]] = [:]
+        for pack in lowPacks {
+            let typeKey = normalizedBatteryType(pack.batteryType)
+            packsByType[typeKey, default: []].append(pack)
+        }
+
+        for (typeKey, typePacks) in packsByType {
+            guard let pref = prefsByType[typeKey] else { continue }
+
+            // Do not send repeated "no batteries left" notifications for the same type.
+            let totalRemaining = typePacks.reduce(0) { $0 + max(0, $1.quantityRemaining) }
+            if totalRemaining <= 0 {
+                if pref.notificationsOn, pref.sentFinal == false {
+                    await scheduleLowPackNotification(
+                        title: "No Batteries Left",
+                        body: "\(pref.batteryType) batteries are at 0 remaining."
+                    )
+                    pref.sentFinal = true
+                }
+                continue
+            }
+
+            // Inventory was replenished (or not yet empty), so allow a future final alert.
+            if pref.sentFinal {
+                pref.sentFinal = false
+            }
+            guard pref.notificationsOn else { continue }
+
+            let preferredPack = typePacks.first(where: { $0.id == preferredPackId })
+            let targetPack = preferredPack ?? typePacks.min(by: { $0.quantityRemaining < $1.quantityRemaining }) ?? typePacks[0]
+            await scheduleLowPackNotification(
+                title: "Low Battery Pack",
+                body: "\(pref.batteryType) pack has \(targetPack.quantityRemaining) remaining (threshold: \(threshold))."
+            )
+        }
+
+        try? context.save()
+    }
+
+    func ensureBatteryTypePreferences(context: ModelContext) -> [BatteryTypeNotificationPreference] {
+        let spaceId = SpaceService.currentSpaceId(context: context)
+        let existingPrefs = fetchBatteryTypePreferences(spaceId: spaceId, context: context)
+        var prefsByType: [String: BatteryTypeNotificationPreference] = [:]
+        for pref in existingPrefs {
+            prefsByType[normalizedBatteryType(pref.batteryType)] = pref
+        }
+
+        let packs = (try? context.fetch(
+            FetchDescriptor<BatteryPack>(
+                predicate: #Predicate<BatteryPack> { $0.spaceId == spaceId && $0.isDone == false },
+                sortBy: [SortDescriptor(\BatteryPack.purchaseDate, order: .forward)]
+            )
+        )) ?? []
+
+        for pack in packs {
+            let normalizedType = normalizedBatteryType(pack.batteryType)
+            guard normalizedType.isEmpty == false else { continue }
+            if prefsByType[normalizedType] == nil {
+                let created = BatteryTypeNotificationPreference(
+                    spaceId: spaceId,
+                    batteryType: pack.batteryType.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                context.insert(created)
+                prefsByType[normalizedType] = created
+            }
+        }
+
+        let sorted = prefsByType.values.sorted { $0.batteryType.localizedCaseInsensitiveCompare($1.batteryType) == .orderedAscending }
+        try? context.save()
+        return sorted
+    }
+
+    func resetFinalLowPackFlag(for batteryType: String, context: ModelContext) {
+        let normalizedType = normalizedBatteryType(batteryType)
+        guard normalizedType.isEmpty == false else { return }
+
+        let spaceId = SpaceService.currentSpaceId(context: context)
+        let prefs = fetchBatteryTypePreferences(spaceId: spaceId, context: context)
+        if let existing = prefs.first(where: { normalizedBatteryType($0.batteryType) == normalizedType }) {
+            existing.sentFinal = false
+            try? context.save()
+            return
+        }
+
+        let created = BatteryTypeNotificationPreference(
+            spaceId: spaceId,
+            batteryType: batteryType.trimmingCharacters(in: .whitespacesAndNewlines),
+            notificationsOn: true,
+            sentFinal: false
+        )
+        context.insert(created)
+        try? context.save()
+    }
+
+    private func scheduleLowPackNotification(title: String, body: String) async {
         let content = UNMutableNotificationContent()
-        content.title = "Low Battery Pack"
-        content.body = "\(targetPack.batteryType) pack has \(targetPack.quantityRemaining) remaining (threshold: \(threshold))."
+        content.title = title
+        content.body = body
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        let identifier = "notif.lowpack.\(targetPack.id.uuidString).\(Int(Date().timeIntervalSince1970))"
+        let identifier = "notif.lowpack.\(Int(Date().timeIntervalSince1970)).\(UUID().uuidString)"
         let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
         _ = await withCheckedContinuation { continuation in
             notificationCenter.add(request) { _ in
                 continuation.resume()
             }
         }
+    }
+
+    private func fetchBatteryTypePreferences(spaceId: UUID, context: ModelContext) -> [BatteryTypeNotificationPreference] {
+        (try? context.fetch(
+            FetchDescriptor<BatteryTypeNotificationPreference>(
+                predicate: #Predicate<BatteryTypeNotificationPreference> { $0.spaceId == spaceId },
+                sortBy: [SortDescriptor(\BatteryTypeNotificationPreference.batteryType, order: .forward)]
+            )
+        )) ?? []
+    }
+
+    private func normalizedBatteryType(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func nextMorningDate(hour: Int, minute: Int, now: Date) -> Date? {

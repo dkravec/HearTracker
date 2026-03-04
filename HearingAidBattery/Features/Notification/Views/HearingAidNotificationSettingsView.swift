@@ -6,6 +6,7 @@ struct HearingAidNotificationSettingsView: View {
 
     @State private var settings: NotificationModel?
     @State private var activeAids: [HearingAid] = []
+    @State private var batteryTypePreferences: [BatteryTypeNotificationPreference] = []
     @State private var showsPermissionAlert: Bool = false
     @State private var hasLoaded: Bool = false
 
@@ -153,6 +154,43 @@ struct HearingAidNotificationSettingsView: View {
                         ),
                         in: 1...48
                     )
+
+                    if batteryTypePreferences.isEmpty == false {
+                        Divider()
+                        ForEach(batteryTypePreferences) { preference in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Toggle(
+                                    isOn: Binding(
+                                        get: { preference.notificationsOn },
+                                        set: { preference.notificationsOn = $0 }
+                                    )
+                                ) {
+                                    Text("Type: \(preference.batteryType)")
+                                        .font(.subheadline.weight(.semibold))
+                                }
+
+                                HStack(spacing: 8) {
+                                    Text(preference.sentFinal ? "No-battery alert sent" : "No-battery alert pending")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+
+                                    Spacer(minLength: 8)
+
+                                    Button(role: .destructive) {
+                                        deleteBatteryTypePreference(preference)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .font(.caption)
+                                }
+                            }
+
+                            if preference.id != batteryTypePreferences.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -212,7 +250,7 @@ struct HearingAidNotificationSettingsView: View {
             sortBy: [SortDescriptor(\HearingAid.createdAt, order: .reverse)]
         )
         activeAids = (try? context.fetch(aidDescriptor)) ?? []
-
+        batteryTypePreferences = ensureBatteryTypePreferences()
         hasLoaded = true
     }
 
@@ -256,5 +294,48 @@ struct HearingAidNotificationSettingsView: View {
             let service = NotificationService()
             await service.rescheduleAll(context: context)
         }
+    }
+
+    private func ensureBatteryTypePreferences() -> [BatteryTypeNotificationPreference] {
+        let spaceId = SpaceService.currentSpaceId(context: context)
+        let prefDescriptor = FetchDescriptor<BatteryTypeNotificationPreference>(
+            predicate: #Predicate<BatteryTypeNotificationPreference> { $0.spaceId == spaceId },
+            sortBy: [SortDescriptor(\BatteryTypeNotificationPreference.batteryType, order: .forward)]
+        )
+        var preferences = (try? context.fetch(prefDescriptor)) ?? []
+        var prefKeys = Set(preferences.map { normalizedBatteryType($0.batteryType) })
+
+        let packDescriptor = FetchDescriptor<BatteryPack>(
+            predicate: #Predicate<BatteryPack> { $0.spaceId == spaceId },
+            sortBy: [SortDescriptor(\BatteryPack.batteryType, order: .forward)]
+        )
+        let packs = (try? context.fetch(packDescriptor)) ?? []
+        for pack in packs {
+            let normalizedType = normalizedBatteryType(pack.batteryType)
+            guard normalizedType.isEmpty == false else { continue }
+            if prefKeys.contains(normalizedType) == false {
+                let created = BatteryTypeNotificationPreference(
+                    spaceId: spaceId,
+                    batteryType: pack.batteryType.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                context.insert(created)
+                preferences.append(created)
+                prefKeys.insert(normalizedType)
+            }
+        }
+
+        preferences.sort { $0.batteryType.localizedCaseInsensitiveCompare($1.batteryType) == .orderedAscending }
+        try? context.save()
+        return preferences
+    }
+
+    private func deleteBatteryTypePreference(_ preference: BatteryTypeNotificationPreference) {
+        context.delete(preference)
+        try? context.save()
+        batteryTypePreferences.removeAll(where: { $0.id == preference.id })
+    }
+
+    private func normalizedBatteryType(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

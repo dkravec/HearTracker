@@ -8,6 +8,32 @@
 import SwiftUI
 import SwiftData
 
+struct HearingAidDetailContainer: View {
+    let route: HearingAidRoute
+    @Query private var hearingAids: [HearingAid]
+
+    init(route: HearingAidRoute) {
+        self.route = route
+        let hearingAidId = route.hearingAidId
+        let spaceId = route.spaceId
+        _hearingAids = Query(
+            filter: #Predicate<HearingAid> { $0.id == hearingAidId && $0.spaceId == spaceId },
+            sort: \HearingAid.createdAt,
+            order: .reverse
+        )
+    }
+
+    var body: some View {
+        Group {
+            if let aid = hearingAids.first {
+                HearingAidDetailView(aid: aid)
+            } else {
+                ContentUnavailableView("Hearing Aid Not Found", systemImage: "questionmark.circle")
+            }
+        }
+    }
+}
+
 struct HearingAidDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -236,12 +262,11 @@ struct HearingAidDetailView: View {
             }
         }
         .onAppear { viewModel.syncFromAid(aid) }
-        .task(id: logsRefreshSignature) {
-            _ = batteryStatusViewModel.refresh(
-                hearingAidId: aid.id,
-                windowSize: Self.statsWindowSize,
-                context: context
-            )
+        .onAppear {
+            refreshBatteryStatus()
+        }
+        .onChange(of: logsRefreshSignature) { _, _ in
+            refreshBatteryStatus()
         }
         .appBackground()
         .errorAlert(title: "Unable to Save", message: $viewModel.errorMessage)
@@ -391,21 +416,32 @@ struct HearingAidDetailView: View {
         }
     }
 
-    private var logsRefreshSignature: UInt64 {
-        var token: UInt64 = UInt64(logs.count)
-        for log in logs {
-            var hasher = Hasher()
-            hasher.combine(log.id)
-            hasher.combine(log.timestamp.timeIntervalSince1970)
-            hasher.combine(log.excludeFromStats)
-            hasher.combine(log.excludePreviousGapFromStats)
-            token ^= UInt64(bitPattern: Int64(hasher.finalize()))
+    private var logsRefreshSignature: String {
+        guard let newest = logs.first else {
+            return "empty"
         }
-        return token
+
+        // Keep the task token deterministic and compact so navigation does not
+        // trigger repeated refresh loops on every render.
+        return [
+            String(logs.count),
+            newest.id.uuidString,
+            String(newest.timestamp.timeIntervalSince1970),
+            String(newest.excludeFromStats),
+            String(newest.excludePreviousGapFromStats),
+        ].joined(separator: "|")
     }
 
     private var availablePacks: [BatteryPack] {
         packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
+    }
+
+    private func refreshBatteryStatus() {
+        _ = batteryStatusViewModel.refresh(
+            hearingAidId: aid.id,
+            windowSize: Self.statsWindowSize,
+            context: context
+        )
     }
 
 }

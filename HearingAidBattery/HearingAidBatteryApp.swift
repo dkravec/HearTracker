@@ -8,10 +8,26 @@
 import SwiftUI
 import SwiftData
 import Foundation
+import UserNotifications
+
+private final class ForegroundNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound, .badge])
+    }
+}
 
 @main
 struct HearingAidBatteryApp: App {
     @StateObject private var activeSpaceSelection = ActiveSpaceSelectionService()
+    private let foregroundNotificationDelegate = ForegroundNotificationDelegate()
+
+    init() {
+        UNUserNotificationCenter.current().delegate = foregroundNotificationDelegate
+    }
 
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -21,6 +37,7 @@ struct HearingAidBatteryApp: App {
             BatteryPack.self,
             IssueLog.self,
             NotificationModel.self,
+            BatteryTypeNotificationPreference.self,
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema,

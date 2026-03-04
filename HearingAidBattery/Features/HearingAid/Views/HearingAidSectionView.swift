@@ -11,10 +11,12 @@ import SwiftData
 struct HearingAidSectionView: View {
     @Environment(\.modelContext) private var context
     @Query private var hearingAids: [HearingAid]
+    @Query private var logs: [BatteryLog]
     @Query private var packs: [BatteryPack]
 
     @StateObject private var viewModel = HearingAidListViewModel()
     @State private var showsAddHearingAidSheet: Bool = false
+    @State private var selectedAidRoute: HearingAidRoute?
 
     init() {
         let activeSpaceId = SpaceService.activeSpaceIdForQueries
@@ -26,6 +28,11 @@ struct HearingAidSectionView: View {
         _packs = Query(
             filter: #Predicate<BatteryPack> { $0.spaceId == activeSpaceId },
             sort: \BatteryPack.purchaseDate,
+            order: .reverse
+        )
+        _logs = Query(
+            filter: #Predicate<BatteryLog> { $0.spaceId == activeSpaceId },
+            sort: \BatteryLog.timestamp,
             order: .reverse
         )
     }
@@ -57,6 +64,10 @@ struct HearingAidSectionView: View {
                     ForEach(activeAids) { aid in
                         HearingAidCardRow(
                             aid: aid,
+                            changesCount: changesCount(for: aid),
+                            onOpenTapped: {
+                                selectedAidRoute = HearingAidRoute(hearingAidId: aid.id, spaceId: aid.spaceId)
+                            },
                             onLogTapped: { viewModel.beginLog(for: aid) }
                         )
                     }
@@ -69,6 +80,10 @@ struct HearingAidSectionView: View {
                     ForEach(retiredAids) { aid in
                         HearingAidCardRow(
                             aid: aid,
+                            changesCount: changesCount(for: aid),
+                            onOpenTapped: {
+                                selectedAidRoute = HearingAidRoute(hearingAidId: aid.id, spaceId: aid.spaceId)
+                            },
                             onLogTapped: { viewModel.beginLog(for: aid) }
                         )
                     }
@@ -78,6 +93,9 @@ struct HearingAidSectionView: View {
         }
         .navigationTitle("Hearing Aids")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(item: $selectedAidRoute) { route in
+            HearingAidDetailContainer(route: route)
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button {
@@ -121,18 +139,29 @@ struct HearingAidSectionView: View {
         }
         .errorAlert(title: "Unable to Save", message: $viewModel.errorMessage)
     }
+
+    private var logCountsByAidId: [UUID: Int] {
+        logs.reduce(into: [:]) { counts, log in
+            guard let aidId = log.hearingAid?.id else { return }
+            counts[aidId, default: 0] += 1
+        }
+    }
+
+    private func changesCount(for aid: HearingAid) -> Int {
+        logCountsByAidId[aid.id, default: 0]
+    }
 }
 
 struct HearingAidCardRow: View {
     let aid: HearingAid
+    let changesCount: Int
+    let onOpenTapped: () -> Void
     let onLogTapped: () -> Void
 
     var body: some View {
-        NavigationLink {
-            HearingAidDetailView(aid: aid)
-        } label: {
-            CardRowContainer {
-                HStack(alignment: .center, spacing: 12) {
+        CardRowContainer {
+            HStack(alignment: .center, spacing: 12) {
+                Button(action: onOpenTapped) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(aid.name)
                             .font(.headline)
@@ -148,19 +177,20 @@ struct HearingAidCardRow: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        Text("\((aid.logs ?? []).count) changes")
+                        Text("\(changesCount) changes")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-
-                    Spacer(minLength: 8)
-
-                    Button("Log") {
-                        onLogTapped()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityLabel("Log battery change for \(aid.name)")
                 }
+                .buttonStyle(.plain)
+
+                Spacer(minLength: 8)
+
+                Button("Log") {
+                    onLogTapped()
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityLabel("Log battery change for \(aid.name)")
             }
         }
         .buttonStyle(.plain)

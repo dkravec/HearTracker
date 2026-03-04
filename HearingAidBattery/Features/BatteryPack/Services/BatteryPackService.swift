@@ -71,6 +71,7 @@ final class BatteryPackService {
 
         context.insert(pack)
         try context.save()
+        NotificationService().resetFinalLowPackFlag(for: pack.batteryType, context: context)
     }
 
     func updatePack(
@@ -113,6 +114,7 @@ final class BatteryPackService {
         batteryPack.note = normalized.note
 
         try context.save()
+        NotificationService().resetFinalLowPackFlag(for: batteryPack.batteryType, context: context)
     }
 
     func deletePack(_ batteryPack: BatteryPack, context: ModelContext) throws {

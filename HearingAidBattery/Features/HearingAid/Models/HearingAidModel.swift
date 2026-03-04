@@ -8,6 +8,15 @@
 import Foundation
 import SwiftData
 
+struct HearingAidRoute: Hashable, Identifiable {
+    let hearingAidId: UUID
+    let spaceId: UUID
+
+    var id: String {
+        "\(spaceId.uuidString)-\(hearingAidId.uuidString)"
+    }
+}
+
 @Model
 final class HearingAid {
     var id: UUID = UUID()

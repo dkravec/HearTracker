@@ -89,11 +89,24 @@ final class BatteryLogService: BatteryLogProviding {
     }
 
     func deleteLog(_ log: BatteryLog, context: ModelContext) throws {
+        restoreBatteryIfNeeded(for: log)
         context.delete(log)
         try context.save()
     }
 
     func deleteLogs(at offsets: IndexSet, from logs: [BatteryLog], context: ModelContext) throws {
+        var restoreCountsByPackId: [UUID: (pack: BatteryPack, count: Int)] = [:]
+        for index in offsets {
+            let log = logs[index]
+            if let pack = log.batteryPack {
+                restoreCountsByPackId[pack.id, default: (pack: pack, count: 0)].count += 1
+            }
+        }
+
+        for entry in restoreCountsByPackId.values {
+            restoreBatteries(count: entry.count, in: entry.pack)
+        }
+
         for index in offsets {
             context.delete(logs[index])
         }
@@ -108,5 +121,16 @@ final class BatteryLogService: BatteryLogProviding {
         )
         let logs = (try? context.fetch(descriptor)) ?? []
         return logs.first(where: { ($0.batteryType?.isEmpty == false) })?.batteryType
+    }
+
+    private func restoreBatteryIfNeeded(for log: BatteryLog) {
+        guard let pack = log.batteryPack else { return }
+        restoreBatteries(count: 1, in: pack)
+    }
+
+    private func restoreBatteries(count: Int, in pack: BatteryPack) {
+        guard count > 0 else { return }
+        let restoredQuantity = min(pack.quantityPurchased, pack.quantityRemaining + count)
+        pack.quantityRemaining = max(0, restoredQuantity)
     }
 }
