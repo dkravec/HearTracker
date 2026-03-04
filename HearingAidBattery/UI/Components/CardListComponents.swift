@@ -116,11 +116,32 @@ struct EmptyStateView: View {
 }
 
 extension View {
+    /// Applies the canonical HearTracker screen background.
+    /// Use this once at a screen or sheet root to avoid layered gradients/materials.
     func appBackground() -> some View {
         ZStack {
             AppBackgroundView()
             self
         }
+    }
+
+    /**
+     Canonical screen content padding used across the app.
+
+     Replaces repeated:
+     .padding(.horizontal, 16)
+     .padding(.vertical, 12)
+
+     Values:
+     - Horizontal: 16
+     - Vertical: 12
+
+     Only modify if intentionally updating the app's design system.
+    */
+    func screenContentPadding() -> some View {
+        self
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
     }
 
     func errorAlert(

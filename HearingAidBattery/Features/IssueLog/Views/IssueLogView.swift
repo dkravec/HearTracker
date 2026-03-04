@@ -75,8 +75,7 @@ struct IssueLogListView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle("Issues")
         .navigationBarTitleDisplayMode(.inline)
@@ -326,8 +325,7 @@ struct IssueLogDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle("Issue Detail")
         .navigationBarTitleDisplayMode(.inline)
@@ -516,6 +514,8 @@ struct AddIssueLogSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .appBackground()
             .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -590,6 +590,8 @@ private struct ResolveIssueSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .appBackground()
             .navigationTitle("Resolve Issue")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

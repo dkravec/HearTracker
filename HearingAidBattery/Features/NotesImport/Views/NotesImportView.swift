@@ -188,8 +188,7 @@ struct NotesImportView: View {
                     .disabled(previewItems.isEmpty || unresolvedItems.isEmpty == false || selectedHearingAid == nil)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Notes Import")

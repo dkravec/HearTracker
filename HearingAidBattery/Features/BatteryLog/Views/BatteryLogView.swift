@@ -21,8 +21,7 @@ struct BatteryLogListView: View {
                     BatteryLogRow(log: log, rowModel: rowModel)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .task(id: refreshSignature) {
             viewModel.refresh(sortedLogs: sortedLogs, currentLogId: currentLogId)

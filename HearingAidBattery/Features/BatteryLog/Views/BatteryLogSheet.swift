@@ -101,6 +101,8 @@ struct BatteryLogSheet: View {
                 Text("Leave blank to log without a note.")
             }
         }
+        .scrollContentBackground(.hidden)
+        .appBackground()
         .navigationTitle("New Battery Log")
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {

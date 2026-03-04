@@ -84,19 +84,15 @@ struct OnboardingFlowView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                AppBackgroundView()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        onboardingHeader
-                        CardRowContainer {
-                            stepContent
-                        }
-                        onboardingNavigation
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    onboardingHeader
+                    CardRowContainer {
+                        stepContent
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
+                    onboardingNavigation
                 }
+                .screenContentPadding()
             }
             .navigationTitle("Welcome")
             .navigationBarTitleDisplayMode(.inline)
@@ -137,7 +133,6 @@ struct OnboardingFlowView: View {
             }
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
-            .appBackground()
         }
         .errorAlert(title: "Unable to Continue", message: $errorMessage)
         .appBackground()
@@ -209,27 +204,23 @@ struct OnboardingFlowView: View {
                         NavigationLink {
                             HearingAidDetailView(aid: aid)
                         } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(aid.name)
-                                        .font(.subheadline.weight(.semibold))
-                                    if let model = aid.model, model.isEmpty == false {
-                                        Text(model)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
+                            CardRowContainer {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(aid.name)
+                                            .font(.subheadline.weight(.semibold))
+                                        if let model = aid.model, model.isEmpty == false {
+                                            Text(model)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
                                     }
+                                    Spacer(minLength: 8)
+                                    Text("Edit")
+                                        .font(.caption.weight(.semibold))
+                                        .foregroundStyle(.secondary)
                                 }
-                                Spacer(minLength: 8)
-                                Text("Edit")
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(.secondary)
                             }
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 10)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                    .fill(Color.white.opacity(0.08))
-                            )
                         }
                         .buttonStyle(.plain)
                     }

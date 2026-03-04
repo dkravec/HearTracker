@@ -25,8 +25,7 @@ struct HearingAidNotificationSettingsView: View {
                         .padding(.top, 40)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle("Notification Preferences")
         .navigationBarTitleDisplayMode(.inline)

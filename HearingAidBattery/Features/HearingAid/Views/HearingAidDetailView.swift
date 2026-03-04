@@ -108,8 +108,7 @@ struct HearingAidDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle(aid.name)
         .toolbar {
@@ -199,7 +198,6 @@ struct HearingAidDetailView: View {
                     ContentUnavailableView("Log Not Found", systemImage: "questionmark.circle")
                 }
             }
-            .appBackground()
         }
         .onAppear { viewModel.syncFromAid(aid) }
         .task(id: logsRefreshSignature) {

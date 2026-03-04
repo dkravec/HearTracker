@@ -69,6 +69,8 @@ struct AddHearingAidView: View {
             }
             .disabled(trimmedName.isEmpty)
         }
+        .scrollContentBackground(.hidden)
+        .appBackground()
         .navigationTitle("Add Hearing Aid")
         .errorAlert(title: "Unable to Create Hearing Aid", message: $errorMessage)
     }

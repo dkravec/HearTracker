@@ -53,11 +53,8 @@ struct HearingAidListView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                AppBackgroundView()
-
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 12) {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
                         if viewModel.showsInventoryWarning {
                             CardRowContainer {
                                 HStack(alignment: .top, spacing: 10) {
@@ -209,11 +206,8 @@ struct HearingAidListView: View {
                             }
                         }
 
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
                 }
-                .background(Color.clear)
+                .screenContentPadding()
             }
             .navigationTitle("HearTracker")
             .navigationDestination(for: BatteryLogRoute.self) { route in
@@ -231,13 +225,14 @@ struct HearingAidListView: View {
 
                 ToolbarItem(placement: .navigationBarLeading) {
                     NavigationLink {
-                        SettingView().appBackground()
+                        SettingView()
                     } label: {
                         Image(systemName: "gearshape")
                     }
                     .accessibilityLabel("Settings")
                 }
             }
+            .appBackground()
         }
         .sheet(isPresented: $showsAddActions) {
             AddEntryChoiceSheet(
@@ -562,30 +557,26 @@ private struct AddItemActionRowLabel: View {
     var isDisabled: Bool = false
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.title3.weight(.semibold))
-                .frame(width: 30, height: 30)
-                .foregroundStyle(isDisabled ? .secondary : .primary)
+        CardRowContainer {
+            HStack(spacing: 12) {
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.semibold))
+                    .frame(width: 30, height: 30)
+                    .foregroundStyle(isDisabled ? .secondary : .primary)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.headline)
-                Text(subtitle)
-                    .font(.subheadline)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.headline)
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
             }
-            Spacer(minLength: 0)
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-        )
         .opacity(isDisabled ? 0.55 : 1)
     }
 }

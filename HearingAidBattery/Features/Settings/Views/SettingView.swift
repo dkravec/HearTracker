@@ -162,8 +162,7 @@ struct SettingView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
@@ -272,7 +271,7 @@ struct SettingView: View {
             }
             .presentationDetents([.medium])
             .presentationDragIndicator(.visible)
-            .background(AppBackgroundView())
+            .appBackground()
         }
         .alert("Delete Battery Logs?", isPresented: $showsDeleteLogsAlert) {
             Button("Delete", role: .destructive) {
@@ -383,6 +382,7 @@ struct SettingView: View {
                         }
                     )
                 }
+                .appBackground()
             } else {
                 EmptyView()
             }
@@ -953,8 +953,7 @@ private struct AboutView: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle("About")
         .navigationBarTitleDisplayMode(.inline)

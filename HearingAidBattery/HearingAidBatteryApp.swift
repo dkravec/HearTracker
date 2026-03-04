@@ -83,7 +83,6 @@ private struct AppRootView: View {
                     .id(activeSpaceSelection.activeSpaceId)
             }
         }
-        .appBackground()
         .onAppear {
             activeSpaceSelection.bootstrap(context: context)
             reevaluateFlow()

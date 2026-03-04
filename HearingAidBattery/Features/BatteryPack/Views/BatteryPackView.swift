@@ -18,8 +18,7 @@ struct BatteryPackListView: View {
                     averageDuration: averageDuration
                 )
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle("Battery Packs")
         .navigationBarTitleDisplayMode(.inline)
@@ -438,6 +437,8 @@ struct AddBatteryPackSheet: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .appBackground()
         .navigationTitle(title)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -692,8 +693,7 @@ struct BatteryPackDetailView: View {
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .screenContentPadding()
         }
         .navigationTitle("Pack Detail")
         .navigationBarTitleDisplayMode(.inline)
@@ -838,6 +838,8 @@ struct UseBatteriesSheet: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .appBackground()
             .navigationTitle("Use Batteries")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
