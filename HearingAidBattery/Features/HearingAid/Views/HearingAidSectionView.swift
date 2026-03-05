@@ -38,15 +38,15 @@ struct HearingAidSectionView: View {
     }
 
     private var activeAids: [HearingAid] {
-        viewModel.activeAids(from: hearingAids)
+        viewModel.activeAids(from: hearingAids.uniqueById())
     }
 
     private var retiredAids: [HearingAid] {
-        viewModel.retiredAids(from: hearingAids)
+        viewModel.retiredAids(from: hearingAids.uniqueById())
     }
 
     private var availablePacks: [BatteryPack] {
-        packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
+        packs.uniqueById().filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
     var body: some View {
@@ -142,7 +142,7 @@ struct HearingAidSectionView: View {
     }
 
     private var logCountsByAidId: [UUID: Int] {
-        logs.reduce(into: [:]) { counts, log in
+        logs.uniqueById().reduce(into: [:]) { counts, log in
             guard let aidId = log.hearingAid?.id else { return }
             counts[aidId, default: 0] += 1
         }

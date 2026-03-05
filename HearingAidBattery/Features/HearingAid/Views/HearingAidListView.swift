@@ -50,11 +50,15 @@ struct HearingAidListView: View {
     }
 
     private var activeAids: [HearingAid] {
-        viewModel.activeAids(from: hearingAids)
+        viewModel.activeAids(from: hearingAids.uniqueById())
+    }
+
+    private var filteredPacks: [BatteryPack] {
+        packs.uniqueById()
     }
 
     private var activePacks: [BatteryPack] {
-        packs.uniqueById().filter { $0.quantityRemaining > 0 && $0.isDone == false }
+        filteredPacks.filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
     var body: some View {
@@ -87,7 +91,7 @@ struct HearingAidListView: View {
                                         } label: {
                                             HomeBatteryStatsCard(
                                                 aid: aid,
-                                                packs: packs,
+                                                packs: filteredPacks,
                                                 durationFormatter: durationFormatter,
                                                 targetCurrency: mostRecentCurrencyCode,
                                                 refreshTrigger: viewModel.statsRefreshTrigger
@@ -166,7 +170,7 @@ struct HearingAidListView: View {
                                 NavigableCardRow {
                                     BatteryPackDetailView(
                                         pack: pack,
-                                        existingPacks: packs,
+                                        existingPacks: filteredPacks,
                                         averageDuration: nil
                                     )
                                 } content: {
@@ -248,7 +252,7 @@ struct HearingAidListView: View {
             AddEntryChoiceSheet(
                 activeAids: activeAids,
                 availablePacks: activePacks,
-                packs: Array(packs),
+                packs: Array(filteredPacks),
                 defaultAidId: viewModel.aidNextToDie(from: activeAids, context: context)?.id ?? activeAids.first?.id,
                 onSaveBatteryLog: { aid, timestamp, note, packId, lotId in
                     viewModel.selectedPackId = packId
@@ -328,14 +332,14 @@ struct HearingAidListView: View {
     }
 
     private var activeIssues: [IssueLog] {
-        issues.filter { issue in
+        issues.uniqueById().filter { issue in
             guard let aid = issue.hearingAid else { return false }
             return aid.retired == false && issue.isResolved == false
         }
     }
 
     private var logCountsByAidId: [UUID: Int] {
-        logs.reduce(into: [:]) { counts, log in
+        logs.uniqueById().reduce(into: [:]) { counts, log in
             guard let aidId = log.hearingAid?.id else { return }
             counts[aidId, default: 0] += 1
         }
@@ -347,7 +351,7 @@ struct HearingAidListView: View {
 
     /// The currency code from the most recently purchased pack, or the user's locale currency.
     private var mostRecentCurrencyCode: String {
-        packs.first(where: { $0.currencyCode != nil })?.currencyCode?.uppercased()
+        filteredPacks.first(where: { $0.currencyCode != nil })?.currencyCode?.uppercased()
             ?? CurrencyFormatter.localeCurrencyCode
     }
 }

@@ -136,11 +136,11 @@ struct IssueLogListView: View {
     }
 
     private var unresolvedIssues: [IssueLog] {
-        issues.filter { !$0.isResolved }
+        issues.uniqueById().filter { !$0.isResolved }
     }
 
     private var resolvedIssues: [IssueLog] {
-        issues.filter { $0.isResolved }
+        issues.uniqueById().filter { $0.isResolved }
     }
 
     @ViewBuilder

@@ -108,8 +108,11 @@ struct OnboardingFlowView: View {
             .toolbarBackground(.hidden, for: .navigationBar)
         }
         .onAppear {
-            syncWithExistingData()
+            checkForSyncedData()
             loadNotificationState()
+        }
+        .onChange(of: hearingAids.count) {
+            checkForSyncedData()
         }
         .sheet(isPresented: $showsAddPackSheet) {
             AddBatteryPackSheet(
@@ -127,7 +130,6 @@ struct OnboardingFlowView: View {
                         context: context
                     )
                     showsAddPackSheet = false
-                    syncWithExistingData()
                 },
                 onCancel: { showsAddPackSheet = false }
             )
@@ -135,9 +137,7 @@ struct OnboardingFlowView: View {
             .presentationDragIndicator(.visible)
             .appBackground()
         }
-        .sheet(isPresented: $showsNotificationConfigSheet, onDismiss: {
-            syncWithExistingData()
-        }) {
+        .sheet(isPresented: $showsNotificationConfigSheet) {
             NavigationStack {
                 HearingAidNotificationSettingsView()
             }
@@ -381,6 +381,24 @@ struct OnboardingFlowView: View {
 
     private func syncWithExistingData() {
         loadNotificationState()
+    }
+
+    /// Checks if iCloud synced data with hearing aids. If so, skip onboarding entirely.
+    private func checkForSyncedData() {
+        let allAids = hearingAids.uniqueById()
+        guard !allAids.isEmpty else { return }
+
+        // Data synced from iCloud - use the first aid's space and complete onboarding
+        if let firstAid = allAids.first {
+            activeSpaceSelection.setCurrentSpace(firstAid.spaceId, context: context)
+        }
+
+        // Clear draft state and complete
+        displayName = ""
+        roleHintRaw = TrackingRole.myself.rawValue
+        onboardingSpaceIdString = ""
+        onboardingStepRaw = Step.name.rawValue
+        onboardingCompleted = true
     }
 
     @discardableResult

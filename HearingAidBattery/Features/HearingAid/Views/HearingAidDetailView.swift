@@ -42,6 +42,8 @@ struct HearingAidDetailView: View {
     @Query private var logs: [BatteryLog]
     @Query private var packs: [BatteryPack]
 
+    private var filteredLogs: [BatteryLog] { logs.uniqueById() }
+
     @StateObject private var viewModel = HearingAidDetailViewModel()
     @StateObject private var batteryStatusViewModel = BatteryStatusViewModel()
     @State private var logErrorMessage: String?
@@ -110,7 +112,7 @@ struct HearingAidDetailView: View {
                 SectionHeaderView(title: "Battery Logs")
                     .padding(.top, viewModel.isEditing ? 4 : 0)
 
-                if logs.isEmpty {
+                if filteredLogs.isEmpty {
                     EmptyStateView(
                         title: "No Battery Logs",
                         systemImage: FeatureSymbols.batteryLog,
@@ -118,7 +120,7 @@ struct HearingAidDetailView: View {
                     )
                 }
 
-                ForEach(Array(logs.enumerated()), id: \.element.id) { index, log in
+                ForEach(Array(filteredLogs.enumerated()), id: \.element.id) { index, log in
                     let rowModel = rowModel(for: index)
 
                     Group {
@@ -204,7 +206,7 @@ struct HearingAidDetailView: View {
         }
         .alert("Remove Battery Logs?", isPresented: $showsDeleteLogsAlert) {
             Button("Remove", role: .destructive) {
-                viewModel.deleteAllLogs(for: aid.id, logs: logs, context: context)
+                viewModel.deleteAllLogs(for: aid.id, logs: filteredLogs, context: context)
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -230,8 +232,8 @@ struct HearingAidDetailView: View {
         }
         .sheet(item: $selectedLogSelection) { selection in
             NavigationStack {
-                if let index = logs.firstIndex(where: { $0.id == selection.id }) {
-                    let log = logs[index]
+                if let index = filteredLogs.firstIndex(where: { $0.id == selection.id }) {
+                    let log = filteredLogs[index]
                     BatteryLogDetailView(
                         log: log,
                         rowModel: rowModel(for: index),
@@ -370,7 +372,7 @@ struct HearingAidDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.bordered)
-                .disabled(logs.isEmpty)
+                .disabled(filteredLogs.isEmpty)
 
                 Button(role: .destructive) {
                     viewModel.showsDeleteAlert = true
@@ -390,10 +392,10 @@ struct HearingAidDetailView: View {
     }
 
     private func rowModel(for index: Int) -> BatteryLogRowModel {
-        let log = logs[index]
+        let log = filteredLogs[index]
         let duration: TimeInterval? = {
             guard index > 0 else { return nil }
-            let newerLog = logs[index - 1]
+            let newerLog = filteredLogs[index - 1]
             let interval = newerLog.timestamp.timeIntervalSince(log.timestamp)
             return interval > 0 ? interval : nil
         }()
@@ -418,14 +420,14 @@ struct HearingAidDetailView: View {
     }
 
     private var logsRefreshSignature: String {
-        guard let newest = logs.first else {
+        guard let newest = filteredLogs.first else {
             return "empty"
         }
 
         // Keep the task token deterministic and compact so navigation does not
         // trigger repeated refresh loops on every render.
         return [
-            String(logs.count),
+            String(filteredLogs.count),
             newest.id.uuidString,
             String(newest.timestamp.timeIntervalSince1970),
             String(newest.excludeFromStats),
@@ -434,7 +436,7 @@ struct HearingAidDetailView: View {
     }
 
     private var availablePacks: [BatteryPack] {
-        packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
+        packs.uniqueById().filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
     private func refreshBatteryStatus() {

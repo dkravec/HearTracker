@@ -49,6 +49,9 @@ struct HearingAidBatteryApp: App {
         do {
             let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
 
+            // Clean up any duplicate records from iCloud sync conflicts BEFORE migrations
+            DeduplicationService.runIfNeeded(container: container)
+
             SpaceMigrationService.runIfNeeded(container: container)
 #if DEBUG
             let configuredStoreURL = modelConfiguration.url.absoluteString

@@ -60,18 +60,22 @@ struct BatteryPackSectionView: View {
         )
     }
 
+    private var filteredPacks: [BatteryPack] {
+        packs.uniqueById()
+    }
+
     private var activePacks: [BatteryPack] {
-        packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
+        filteredPacks.filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
     private var doneOrEmptyPacks: [BatteryPack] {
-        packs.filter { $0.quantityRemaining == 0 || $0.isDone }
+        filteredPacks.filter { $0.quantityRemaining == 0 || $0.isDone }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             SectionHeaderView(title: "Battery Packs")
-            if packs.isEmpty {
+            if filteredPacks.isEmpty {
                 CardRowContainer {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("No Battery Packs")
@@ -103,7 +107,7 @@ struct BatteryPackSectionView: View {
                 }
             }
 
-            let costStats = batteryPackService.costStatsByCurrency(from: packs, averageDuration: averageDuration)
+            let costStats = batteryPackService.costStatsByCurrency(from: filteredPacks, averageDuration: averageDuration)
             if costStats.isEmpty == false {
                 SectionHeaderView(title: "Cost Stats")
                     .padding(.top, 2)

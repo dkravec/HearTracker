@@ -382,7 +382,7 @@ struct SettingView: View {
         .sheet(isPresented: $showsImportSpaceMappingSheet) {
             ImportSpaceMappingSheet(
                 backupSpaces: pendingImportSpaces,
-                existingSpaces: spaces,
+                existingSpaces: filteredSpaces,
                 selections: $importSpaceTargetSelection,
                 onCancel: {
                     showsImportSpaceMappingSheet = false
@@ -425,7 +425,7 @@ struct SettingView: View {
         }
         .sheet(isPresented: $showsSpaceSwitcher) {
             SpaceSwitcherSheet(
-                spaces: spaces,
+                spaces: filteredSpaces,
                 activeSpaceId: activeSpaceSelection.activeSpaceId,
                 onSelect: { space in
                     activeSpaceSelection.setCurrentSpace(space.id, context: context)
@@ -457,8 +457,12 @@ struct SettingView: View {
         hearingAids.uniqueById().filter { !$0.retired }
     }
 
+    private var filteredSpaces: [Space] {
+        spaces.uniqueById()
+    }
+
     private var currentSpaceName: String {
-        spaces.first(where: { $0.id == activeSpaceSelection.activeSpaceId })?.name ?? "Personal"
+        filteredSpaces.first(where: { $0.id == activeSpaceSelection.activeSpaceId })?.name ?? "Personal"
     }
 
     private func settingsRowLabel(title: String, subtitle: String, systemImage: String) -> some View {
@@ -651,7 +655,7 @@ struct SettingView: View {
     private func resetImportSpaceTargetSelection() {
         var defaults: [UUID: String] = [:]
         for source in pendingImportSpaces {
-            if spaces.contains(where: { $0.id == source.id }) {
+            if filteredSpaces.contains(where: { $0.id == source.id }) {
                 defaults[source.id] = source.id.uuidString
             } else {
                 defaults[source.id] = ImportSpaceMappingSheet.createToken

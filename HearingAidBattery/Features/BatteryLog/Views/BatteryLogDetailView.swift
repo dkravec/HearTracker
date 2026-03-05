@@ -18,6 +18,8 @@ struct BatteryLogDetailContainer: View {
     @Query private var logs: [BatteryLog]
     @State private var errorMessage: String?
 
+    private var filteredLogs: [BatteryLog] { logs.uniqueById() }
+
     private static let durationFormatter = BatteryDurationFormatter()
     private let batteryLogService: BatteryLogProviding = BatteryLogService()
 
@@ -67,10 +69,10 @@ struct BatteryLogDetailContainer: View {
     }
 
     private func resolvedLogAndRow() -> (BatteryLog, BatteryLogRowModel)? {
-        for (index, log) in logs.enumerated() where log.id == route.logId {
+        for (index, log) in filteredLogs.enumerated() where log.id == route.logId {
             let duration: TimeInterval? = {
                 guard index > 0 else { return nil }
-                let newerLog = logs[index - 1]
+                let newerLog = filteredLogs[index - 1]
                 let interval = newerLog.timestamp.timeIntervalSince(log.timestamp)
                 return interval > 0 ? interval : nil
             }()
