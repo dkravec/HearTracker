@@ -159,12 +159,17 @@ struct HearingAidCardRow: View {
     let onOpenTapped: () -> Void
     let onLogTapped: () -> Void
 
+    private var displayName: String {
+        let trimmed = aid.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "(Unnamed Hearing Aid)" : trimmed
+    }
+
     var body: some View {
         CardRowContainer {
             HStack(alignment: .center, spacing: 12) {
                 Button(action: onOpenTapped) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(aid.name)
+                        Text(displayName)
                             .font(.headline)
 
                         if let model = aid.model?.trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty {

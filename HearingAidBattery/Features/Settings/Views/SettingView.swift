@@ -439,6 +439,12 @@ struct SettingView: View {
                     } catch {
                         resultMessage = "Could not create person space."
                     }
+                },
+                onEdit: { space, newName in
+                    let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty else { return }
+                    space.name = trimmed
+                    try? context.save()
                 }
             )
             .presentationDetents([.medium, .large])
@@ -448,7 +454,7 @@ struct SettingView: View {
     }
 
     private var activeAids: [HearingAid] {
-        hearingAids.filter { !$0.retired }
+        hearingAids.uniqueById().filter { !$0.retired }
     }
 
     private var currentSpaceName: String {
@@ -479,7 +485,7 @@ struct SettingView: View {
     }
 
     private var deleteLogsAlertMessage: String {
-        if let id = pendingDeleteLogsAidId, let aid = hearingAids.first(where: { $0.id == id }) {
+        if let id = pendingDeleteLogsAidId, let aid = hearingAids.uniqueById().first(where: { $0.id == id }) {
             return "This only deletes battery logs for \(aid.name)."
         }
         return "This only deletes battery logs for all hearing aids."
@@ -719,10 +725,13 @@ private struct SpaceSwitcherSheet: View {
     let activeSpaceId: UUID
     let onSelect: (Space) -> Void
     let onCreate: (String, String) -> Void
+    let onEdit: (Space, String) -> Void
 
     @State private var showsCreate: Bool = false
     @State private var newName: String = ""
     @State private var roleOption: RoleOption = .other
+    @State private var spaceToEdit: Space?
+    @State private var editedName: String = ""
 
     var body: some View {
         NavigationStack {
@@ -747,6 +756,15 @@ private struct SpaceSwitcherSheet: View {
                                 }
                             }
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button {
+                                editedName = space.name
+                                spaceToEdit = space
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            .tint(.orange)
+                        }
                     }
                 }
             }
@@ -764,6 +782,36 @@ private struct SpaceSwitcherSheet: View {
                     }
                 }
             }
+        }
+        .sheet(item: $spaceToEdit) { space in
+            NavigationStack {
+                Form {
+                    Section("Person") {
+                        TextField("Name", text: $editedName)
+                            .textInputAutocapitalization(.words)
+                            .autocorrectionDisabled()
+                    }
+                }
+                .navigationTitle("Edit Person")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancel") {
+                            spaceToEdit = nil
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Save") {
+                            onEdit(space, editedName)
+                            spaceToEdit = nil
+                        }
+                        .disabled(editedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .presentationDetents([.medium])
+            .presentationDragIndicator(.visible)
+            .appBackground()
         }
         .sheet(isPresented: $showsCreate) {
             NavigationStack {

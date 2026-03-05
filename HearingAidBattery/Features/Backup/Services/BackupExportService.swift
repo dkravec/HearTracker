@@ -15,15 +15,22 @@ struct BackupExportService {
         let notifications = try context.fetch(FetchDescriptor<NotificationModel>())
         let batteryTypeNotificationPreferences = try context.fetch(FetchDescriptor<BatteryTypeNotificationPreference>())
 
+        // Deduplicate by ID (keep first occurrence) to handle iCloud sync conflicts
+        let uniqueHearingAids = deduplicateById(hearingAids)
+        let uniqueBatteryLogs = deduplicateById(batteryLogs)
+        let uniqueBatteryPacks = deduplicateById(batteryPacks)
+        let uniqueIssueLogs = deduplicateById(issueLogs)
+        let uniqueSpaces = deduplicateById(spaces)
+
         let envelope = BackupEnvelope(
             backupFormatVersion: backupFormatVersion,
             exportedAt: Date(),
-            spaces: spaces.map(dto),
+            spaces: uniqueSpaces.map(dto),
             models: BackupModels_v1(
-                hearingAids: ModelBlock(version: modelVersion, items: hearingAids.map(dto)),
-                batteryLogs: ModelBlock(version: modelVersion, items: batteryLogs.map(dto)),
-                batteryPacks: ModelBlock(version: modelVersion, items: batteryPacks.map(dto)),
-                issueLogs: ModelBlock(version: modelVersion, items: issueLogs.map(dto)),
+                hearingAids: ModelBlock(version: modelVersion, items: uniqueHearingAids.map(dto)),
+                batteryLogs: ModelBlock(version: modelVersion, items: uniqueBatteryLogs.map(dto)),
+                batteryPacks: ModelBlock(version: modelVersion, items: uniqueBatteryPacks.map(dto)),
+                issueLogs: ModelBlock(version: modelVersion, items: uniqueIssueLogs.map(dto)),
                 settings: ModelBlock(version: modelVersion, items: []),
                 notifications: ModelBlock(version: modelVersion, items: notifications.map(dto)),
                 batteryTypeNotificationPreferences: ModelBlock(
@@ -37,6 +44,18 @@ struct BackupExportService {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         return try encoder.encode(envelope)
+    }
+
+    /// Removes duplicate items by ID, keeping the first occurrence.
+    private func deduplicateById<T: Identifiable>(_ items: [T]) -> [T] where T.ID == UUID {
+        var seen = Set<UUID>()
+        return items.filter { item in
+            if seen.contains(item.id) {
+                return false
+            }
+            seen.insert(item.id)
+            return true
+        }
     }
 
     private func dto(_ hearingAid: HearingAid) -> HearingAidDTO_v1 {

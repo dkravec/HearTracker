@@ -138,8 +138,11 @@ struct BackupImportService {
         issueLogLinkedBatteryLogOverrides: [UUID: UUID?],
         spaceImportMode: SpaceImportMode
     ) throws -> BackupImportSummary {
+        // Deduplicate incoming data to handle iCloud sync conflicts or corrupted exports
+        let deduplicatedModels = deduplicateModels(models)
+
         let _ = SpaceService.currentSpaceId(context: context)
-        let normalizedSpaces = normalizedBackupSpaces(spaces: spaces, models: models)
+        let normalizedSpaces = normalizedBackupSpaces(spaces: spaces, models: deduplicatedModels)
         let spaceResolution = try resolveSpaces(
             mode: spaceImportMode,
             backupSpaces: normalizedSpaces,
@@ -162,7 +165,7 @@ struct BackupImportService {
         for item in currentBatteryTypeNotificationPreferences { context.delete(item) }
         for item in currentAids { context.delete(item) }
 
-        let aidsById = try makeDictionary(items: models.hearingAids.items, modelName: "hearingAids") { dto in
+        let aidsById = try makeDictionary(items: deduplicatedModels.hearingAids.items, modelName: "hearingAids") { dto in
             let resolvedSpaceId = resolvedSpaceId(
                 candidate: dto.spaceId,
                 mappedSpaceIds: spaceResolution.mappedSpaceIds,
@@ -183,7 +186,7 @@ struct BackupImportService {
             return aid
         }
 
-        let packsById = try makeDictionary(items: models.batteryPacks.items, modelName: "batteryPacks") { dto in
+        let packsById = try makeDictionary(items: deduplicatedModels.batteryPacks.items, modelName: "batteryPacks") { dto in
             let resolvedSpaceId = resolvedSpaceId(
                 candidate: dto.spaceId,
                 mappedSpaceIds: spaceResolution.mappedSpaceIds,
@@ -232,7 +235,7 @@ struct BackupImportService {
             return pack
         }
 
-        let logsById = try makeDictionary(items: models.batteryLogs.items, modelName: "batteryLogs") { dto in
+        let logsById = try makeDictionary(items: deduplicatedModels.batteryLogs.items, modelName: "batteryLogs") { dto in
             let aidId = try requireReference(
                 dto.hearingAidId,
                 model: "batteryLogs",
@@ -277,7 +280,7 @@ struct BackupImportService {
             return log
         }
 
-        for dto in models.issueLogs.items {
+        for dto in deduplicatedModels.issueLogs.items {
             let isResolved = dto.isResolved ?? false
             let aidId = try requireReference(
                 dto.hearingAidId,
@@ -337,7 +340,7 @@ struct BackupImportService {
             context.insert(issue)
         }
 
-        for dto in models.notifications.items {
+        for dto in deduplicatedModels.notifications.items {
             let notification = NotificationModel(
                 isEnabled: dto.isEnabled,
                 isExpectedDeathWarningEnabled: dto.isExpectedDeathWarningEnabled ?? true,
@@ -354,7 +357,7 @@ struct BackupImportService {
             context.insert(notification)
         }
 
-        for dto in models.batteryTypeNotificationPreferences.items {
+        for dto in deduplicatedModels.batteryTypeNotificationPreferences.items {
             let pref = BatteryTypeNotificationPreference(
                 spaceId: dto.spaceId ?? Space.defaultSpaceId,
                 batteryType: dto.batteryType,
@@ -368,13 +371,95 @@ struct BackupImportService {
 
         try context.save()
         return BackupImportSummary(
-            hearingAids: models.hearingAids.items.count,
-            batteryLogs: models.batteryLogs.items.count,
-            batteryPacks: models.batteryPacks.items.count,
-            issueLogs: models.issueLogs.items.count,
-            notifications: models.notifications.items.count,
-            batteryTypeNotificationPreferences: models.batteryTypeNotificationPreferences.items.count
+            hearingAids: deduplicatedModels.hearingAids.items.count,
+            batteryLogs: deduplicatedModels.batteryLogs.items.count,
+            batteryPacks: deduplicatedModels.batteryPacks.items.count,
+            issueLogs: deduplicatedModels.issueLogs.items.count,
+            notifications: deduplicatedModels.notifications.items.count,
+            batteryTypeNotificationPreferences: deduplicatedModels.batteryTypeNotificationPreferences.items.count
         )
+    }
+
+    /// Deduplicates model items by ID, keeping the first occurrence of each.
+    /// Handles iCloud sync conflicts or corrupted exports that may contain duplicates.
+    private func deduplicateModels(_ models: BackupModels_v1) -> BackupModels_v1 {
+        BackupModels_v1(
+            hearingAids: ModelBlock(
+                version: models.hearingAids.version,
+                items: deduplicateById(models.hearingAids.items)
+            ),
+            batteryLogs: ModelBlock(
+                version: models.batteryLogs.version,
+                items: deduplicateById(models.batteryLogs.items)
+            ),
+            batteryPacks: ModelBlock(
+                version: models.batteryPacks.version,
+                items: deduplicateBatteryPacks(models.batteryPacks.items)
+            ),
+            issueLogs: ModelBlock(
+                version: models.issueLogs.version,
+                items: deduplicateById(models.issueLogs.items)
+            ),
+            settings: models.settings,
+            notifications: ModelBlock(
+                version: models.notifications.version,
+                items: deduplicateById(models.notifications.items)
+            ),
+            batteryTypeNotificationPreferences: ModelBlock(
+                version: models.batteryTypeNotificationPreferences.version,
+                items: deduplicateById(models.batteryTypeNotificationPreferences.items)
+            )
+        )
+    }
+
+    private func deduplicateById<T: HasID>(_ items: [T]) -> [T] {
+        var seen = Set<UUID>()
+        return items.filter { item in
+            if seen.contains(item.id) {
+                return false
+            }
+            seen.insert(item.id)
+            return true
+        }
+    }
+
+    private func deduplicateBatteryPacks(_ items: [BatteryPackDTO_v1]) -> [BatteryPackDTO_v1] {
+        var seen = Set<UUID>()
+        return items.compactMap { pack in
+            if seen.contains(pack.id) {
+                return nil
+            }
+            seen.insert(pack.id)
+            // Also deduplicate lots within each pack
+            guard let lots = pack.lots else { return pack }
+            var lotsSeen = Set<UUID>()
+            let uniqueLots = lots.filter { lot in
+                if lotsSeen.contains(lot.id) {
+                    return false
+                }
+                lotsSeen.insert(lot.id)
+                return true
+            }
+            return BatteryPackDTO_v1(
+                id: pack.id,
+                spaceId: pack.spaceId,
+                createdAt: pack.createdAt,
+                batteryType: pack.batteryType,
+                purchaseDate: pack.purchaseDate,
+                batteriesPerPack: pack.batteriesPerPack,
+                numberOfPacks: pack.numberOfPacks,
+                quantityPurchased: pack.quantityPurchased,
+                quantityRemaining: pack.quantityRemaining,
+                isDone: pack.isDone,
+                isMarkedLost: pack.isMarkedLost,
+                priceAmount: pack.priceAmount,
+                currencyCode: pack.currencyCode,
+                brand: pack.brand,
+                retailer: pack.retailer,
+                note: pack.note,
+                lots: uniqueLots
+            )
+        }
     }
 
     private func makeDictionary<T, U>(
@@ -385,8 +470,10 @@ struct BackupImportService {
         var values: [UUID: U] = [:]
         values.reserveCapacity(items.count)
         for item in items {
+            // Skip duplicates silently - they should be deduplicated upstream,
+            // but this provides an extra safety net
             if values[item.id] != nil {
-                throw BackupImportError.duplicateModelID(model: modelName, id: item.id)
+                continue
             }
             values[item.id] = try transform(item)
         }
@@ -629,3 +716,6 @@ private protocol HasID {
 extension HearingAidDTO_v1: HasID {}
 extension BatteryLogDTO_v1: HasID {}
 extension BatteryPackDTO_v1: HasID {}
+extension IssueLogDTO_v1: HasID {}
+extension NotificationDTO_v1: HasID {}
+extension BatteryTypeNotificationPreferenceDTO_v1: HasID {}

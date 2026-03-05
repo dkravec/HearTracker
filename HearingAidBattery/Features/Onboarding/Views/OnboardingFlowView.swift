@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 struct OnboardingFlowView: View {
     private enum Step: String, CaseIterable {
@@ -62,9 +63,12 @@ struct OnboardingFlowView: View {
     @State private var morningMinute: Int = 0
     @State private var showsNotificationConfigSheet: Bool = false
     @State private var errorMessage: String?
+    @State private var showsFileImporter: Bool = false
+    @State private var isImporting: Bool = false
 
     private let batteryPackService = BatteryPackService()
     private let notificationService = NotificationService()
+    private let backupImportService = BackupImportService()
 
     private var step: Step {
         Step(rawValue: onboardingStepRaw) ?? .name
@@ -75,17 +79,20 @@ struct OnboardingFlowView: View {
     }
 
     private var activeSpaceHearingAids: [HearingAid] {
-        hearingAids.filter { $0.spaceId == activeSpaceSelection.activeSpaceId }
+        hearingAids.uniqueById().filter { $0.spaceId == activeSpaceSelection.activeSpaceId }
     }
 
     private var activeSpacePacks: [BatteryPack] {
-        batteryPacks.filter { $0.spaceId == activeSpaceSelection.activeSpaceId }
+        batteryPacks.uniqueById().filter { $0.spaceId == activeSpaceSelection.activeSpaceId }
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    if step == .name {
+                        welcomeHeader
+                    }
                     onboardingHeader
                     CardRowContainer {
                         stepContent
@@ -94,8 +101,11 @@ struct OnboardingFlowView: View {
                 }
                 .screenContentPadding()
             }
-            .navigationTitle("Welcome")
+            .scrollContentBackground(.hidden)
+            .background(AppBackgroundView())
+            .navigationTitle(step == .name ? "" : "Welcome")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
         }
         .onAppear {
             syncWithExistingData()
@@ -135,7 +145,48 @@ struct OnboardingFlowView: View {
             .presentationDragIndicator(.visible)
         }
         .errorAlert(title: "Unable to Continue", message: $errorMessage)
-        .appBackground()
+        .fileImporter(
+            isPresented: $showsFileImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImportResult(result)
+        }
+    }
+
+    private func handleImportResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let access = url.startAccessingSecurityScopedResource()
+            defer {
+                if access { url.stopAccessingSecurityScopedResource() }
+            }
+            guard let data = try? Data(contentsOf: url) else {
+                errorMessage = "Could not read backup file."
+                return
+            }
+            importBackup(data: data)
+        case .failure:
+            errorMessage = "Import failed."
+        }
+    }
+
+    private func importBackup(data: Data) {
+        isImporting = true
+        do {
+            _ = try backupImportService.importJSONData(
+                data,
+                context: context,
+                spaceImportMode: .preserveBackupSpaces
+            )
+            // Import succeeded - mark onboarding complete and refresh
+            activeSpaceSelection.refresh(context: context)
+            onboardingCompleted = true
+        } catch {
+            errorMessage = "Import failed: \(error.localizedDescription)"
+        }
+        isImporting = false
     }
 
     @ViewBuilder
@@ -164,6 +215,22 @@ struct OnboardingFlowView: View {
             TextField("Your name", text: $displayName)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
+
+            Divider()
+                .padding(.vertical, 4)
+
+            Text("Or restore from a backup")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Button {
+                showsFileImporter = true
+            } label: {
+                Label("Import Backup", systemImage: "square.and.arrow.down.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isImporting)
         }
     }
 
@@ -323,12 +390,16 @@ struct OnboardingFlowView: View {
             let finalName = name.isEmpty ? "Personal" : name
             let space: Space
 
+            // First, check if defaultSpaceId already exists (may have synced from iCloud)
+            let defaultSpaceId = Space.defaultSpaceId
+            let defaultDescriptor = FetchDescriptor<Space>(
+                predicate: #Predicate<Space> { $0.id == defaultSpaceId }
+            )
+            let existingDefault = try context.fetch(defaultDescriptor).first
+
             if selectedRole == .myself {
-                let defaultSpaceId = Space.defaultSpaceId
-                let descriptor = FetchDescriptor<Space>(
-                    predicate: #Predicate<Space> { $0.id == defaultSpaceId }
-                )
-                if let existing = try context.fetch(descriptor).first {
+                // For "myself" role, always use the default space ID
+                if let existing = existingDefault {
                     existing.name = finalName
                     existing.roleHint = TrackingRole.myself.rawValue
                     space = existing
@@ -338,6 +409,7 @@ struct OnboardingFlowView: View {
                     space = created
                 }
             } else if let existingId = UUID(uuidString: onboardingSpaceIdString) {
+                // User already created a space earlier in onboarding (going back/forth)
                 let descriptor = FetchDescriptor<Space>(
                     predicate: #Predicate<Space> { $0.id == existingId }
                 )
@@ -346,11 +418,14 @@ struct OnboardingFlowView: View {
                     existing.roleHint = selectedRole.rawValue
                     space = existing
                 } else {
+                    // Space was deleted/not synced, create new with different ID
                     let created = Space(name: finalName, roleHint: selectedRole.rawValue)
                     context.insert(created)
                     space = created
                 }
             } else {
+                // Non-myself role, no existing onboarding space - create new
+                // Use a new UUID (not defaultSpaceId) to avoid collisions with iCloud synced default
                 let created = Space(name: finalName, roleHint: selectedRole.rawValue)
                 context.insert(created)
                 space = created
@@ -375,6 +450,23 @@ struct OnboardingFlowView: View {
         morningHeadsUpEnabled = settings.isMorningHeadsUpEnabled
         morningHour = settings.morningHour
         morningMinute = settings.morningMinute
+    }
+
+    private var welcomeHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Welcome to")
+                .font(.title2)
+                .foregroundStyle(.secondary)
+            Text("HearTracker")
+                .font(.largeTitle.weight(.bold))
+            Text("Track battery life, predict replacements, and never get caught off guard.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
     }
 
     private var onboardingHeader: some View {

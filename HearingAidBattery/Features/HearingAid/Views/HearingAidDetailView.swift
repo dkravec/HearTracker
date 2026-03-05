@@ -25,7 +25,7 @@ struct HearingAidDetailContainer: View {
 
     var body: some View {
         Group {
-            if let aid = hearingAids.first {
+            if let aid = hearingAids.uniqueById().first {
                 HearingAidDetailView(aid: aid)
             } else {
                 ContentUnavailableView("Hearing Aid Not Found", systemImage: "questionmark.circle")

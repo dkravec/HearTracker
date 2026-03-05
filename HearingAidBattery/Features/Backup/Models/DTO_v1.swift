@@ -101,4 +101,49 @@ struct BatteryTypeNotificationPreferenceDTO_v1: Codable {
     let batteryType: String
     let notificationsOn: Bool
     let sentFinal: Bool
+
+    init(
+        id: UUID,
+        createdAt: Date,
+        spaceId: UUID?,
+        batteryType: String,
+        notificationsOn: Bool,
+        sentFinal: Bool
+    ) {
+        self.id = id
+        self.createdAt = createdAt
+        self.spaceId = spaceId
+        self.batteryType = batteryType
+        self.notificationsOn = notificationsOn
+        self.sentFinal = sentFinal
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case createdAt
+        case spaceId
+        case batteryType
+        case notificationsOn
+        case sentFinal
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        spaceId = try container.decodeIfPresent(UUID.self, forKey: .spaceId)
+        batteryType = try container.decode(String.self, forKey: .batteryType)
+        notificationsOn = try container.decode(Bool.self, forKey: .notificationsOn)
+        sentFinal = try container.decode(Bool.self, forKey: .sentFinal)
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encodeIfPresent(spaceId, forKey: .spaceId)
+        try container.encode(batteryType, forKey: .batteryType)
+        try container.encode(notificationsOn, forKey: .notificationsOn)
+        try container.encode(sentFinal, forKey: .sentFinal)
+    }
 }

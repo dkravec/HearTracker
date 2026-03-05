@@ -24,6 +24,7 @@ struct AppBackgroundView: View {
 }
 
 struct CardRowContainer<Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -35,12 +36,19 @@ struct CardRowContainer<Content: View>: View {
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                Group {
+                    if colorScheme == .dark {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.white.opacity(0.08))
+                    } else {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(.ultraThinMaterial)
+                    }
+                }
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                    .stroke(Color.white.opacity(colorScheme == .dark ? 0.15 : 0.12), lineWidth: 1)
             )
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -135,13 +143,16 @@ extension View {
      Values:
      - Horizontal: 16
      - Vertical: 12
+     - Max width: 600 (for iPad readability)
 
      Only modify if intentionally updating the app's design system.
     */
     func screenContentPadding() -> some View {
         self
+            .frame(maxWidth: 600, alignment: .leading)
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .center)
     }
 
     func errorAlert(
@@ -161,6 +172,23 @@ extension View {
             }
         } message: {
             Text(message.wrappedValue ?? "Something went wrong.")
+        }
+    }
+}
+
+// MARK: - Array Deduplication
+
+extension Array where Element: Identifiable, Element.ID == UUID {
+    /// Removes duplicate items by ID, keeping the first occurrence.
+    /// Handles potential iCloud sync conflicts that create duplicates.
+    func uniqueById() -> [Element] {
+        var seen = Set<UUID>()
+        return filter { item in
+            if seen.contains(item.id) {
+                return false
+            }
+            seen.insert(item.id)
+            return true
         }
     }
 }

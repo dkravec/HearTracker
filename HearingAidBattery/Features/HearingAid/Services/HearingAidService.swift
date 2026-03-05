@@ -56,10 +56,23 @@ final class HearingAidService {
     }
 
     func activeAids(from hearingAids: [HearingAid]) -> [HearingAid] {
-        hearingAids.filter { !$0.retired }
+        deduplicateById(hearingAids).filter { !$0.retired }
     }
 
     func retiredAids(from hearingAids: [HearingAid]) -> [HearingAid] {
-        hearingAids.filter { $0.retired }
+        deduplicateById(hearingAids).filter { $0.retired }
+    }
+
+    /// Removes duplicate items by ID (keeps first occurrence).
+    /// Handles potential iCloud sync conflicts that create duplicates.
+    private func deduplicateById(_ items: [HearingAid]) -> [HearingAid] {
+        var seen = Set<UUID>()
+        return items.filter { item in
+            if seen.contains(item.id) {
+                return false
+            }
+            seen.insert(item.id)
+            return true
+        }
     }
 }

@@ -19,6 +19,7 @@ final class HearingAidListViewModel: ObservableObject {
     @Published var selectedPackId: UUID?
     @Published var selectedLotId: UUID?
     @Published var errorMessage: String?
+    @Published var statsRefreshTrigger: UUID = UUID()
 
     private let hearingAidService: HearingAidService
     private let batteryLogService: BatteryLogProviding
@@ -94,6 +95,7 @@ final class HearingAidListViewModel: ObservableObject {
                 )
             }
             endLog()
+            statsRefreshTrigger = UUID()
         } catch {
             errorMessage = "Could not save battery log."
         }

@@ -54,7 +54,7 @@ struct HearingAidListView: View {
     }
 
     private var activePacks: [BatteryPack] {
-        packs.filter { $0.quantityRemaining > 0 && $0.isDone == false }
+        packs.uniqueById().filter { $0.quantityRemaining > 0 && $0.isDone == false }
     }
 
     var body: some View {
@@ -89,7 +89,8 @@ struct HearingAidListView: View {
                                                 aid: aid,
                                                 packs: packs,
                                                 durationFormatter: durationFormatter,
-                                                targetCurrency: mostRecentCurrencyCode
+                                                targetCurrency: mostRecentCurrencyCode,
+                                                refreshTrigger: viewModel.statsRefreshTrigger
                                             )
                                         }
                                         .buttonStyle(.plain)
@@ -358,6 +359,7 @@ private struct HomeBatteryStatsCard: View {
     let packs: [BatteryPack]
     let durationFormatter: BatteryDurationFormatter
     let targetCurrency: String
+    let refreshTrigger: UUID
 
     @State private var snapshot: BatteryStatsSnapshot = .empty
     @State private var costPerDaySummary: String = "Loading…"
@@ -365,6 +367,11 @@ private struct HomeBatteryStatsCard: View {
     private let statsService = BatteryStatsService()
     private let batteryPackService = BatteryPackService()
     private let currencyFormatter = CurrencyFormatter.shared
+
+    private var displayName: String {
+        let trimmed = aid.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "(Unnamed)" : trimmed
+    }
 
     var body: some View {
         CardRowContainer {
@@ -374,7 +381,7 @@ private struct HomeBatteryStatsCard: View {
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.secondary)
 
-                    Text(aid.name)
+                    Text(displayName)
                         .font(.headline)
                         .lineLimit(1)
 
@@ -417,7 +424,7 @@ private struct HomeBatteryStatsCard: View {
             }
             .frame(width: 245, height: 200, alignment: .topLeading)
         }
-        .task {
+        .task(id: refreshTrigger) {
             let latestSnapshot = statsService.statsSnapshot(
                 for: aid.id,
                 windowSize: Self.statsWindowSize,
